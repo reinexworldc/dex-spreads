@@ -1,0 +1,1443 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Анализ спредов</title>
+    <!-- Заменяем Plotly на Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
+    <!-- Обновляем плагин zoom до актуальной версии, используем более новую версию -->
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@1.2.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Latest compiled and minified CSS for Bootstrap -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <!-- Font Awesome для иконок -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <!-- Popper JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.0/umd/popper.min.js"></script>
+    <!-- Latest compiled JavaScript for Bootstrap -->
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <style>
+        body {
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .dropdown-menu {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .chart-container {
+            height: 500px;
+            width: 100%;
+            margin-bottom: 30px;
+            position: relative; /* Для правильного отображения Chart.js */
+        }
+        /* Курсор-рука при наведении на график */
+        #spread-chart {
+            cursor: move; /* Показывает, что элемент можно перетаскивать */
+            cursor: grab; /* Более современный вид курсора для перетаскивания */
+        }
+        /* Стиль при активном перетаскивании */
+        #spread-chart:active {
+            cursor: grabbing; /* Изменение курсора при активном перетаскивании */
+        }
+        #data-table {
+            width: 100%;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .btn-group {
+            margin-bottom: 20px;
+        }
+        .btn-exchange-pair {
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        .pair-info {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        /* Анимация вращения для иконки обновления */
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .fa-spin {
+            animation: spin 2s linear infinite;
+        }
+        #toggle-live-update {
+            transition: all 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <h1 class="text-center mb-4">Анализ спредов на разных DEX</h1>
+        
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="btn-group">
+                    <button type="button" class="btn btn-primary dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        Выбрать пару бирж
+                    </button>
+                    <div class="dropdown-menu">
+                        {% for pair in exchange_pairs %}
+                        <a class="dropdown-item exchange-pair-option" href="#" data-pair="{{ pair.id }}">{{ pair.name }}</a>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div id="current-pair" class="pair-info">
+                    Текущая пара: <span id="pair-name">{{ exchange_pairs[0].name if exchange_pairs else 'Paradex - Backpack' }}</span>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="dropdown">
+                    <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        Выбрать символ
+                    </button>
+                    <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                        {% for symbol in symbols %}
+                        <a class="dropdown-item symbol-option" href="#" data-symbol="{{ symbol.symbol }}">{{ symbol.symbol }}</a>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="btn-group" role="group" aria-label="Time range">
+                    <button type="button" class="btn btn-outline-primary time-range-btn" data-range="1m">1m</button>
+                    <button type="button" class="btn btn-outline-primary time-range-btn" data-range="5m">5m</button>
+                    <button type="button" class="btn btn-outline-primary time-range-btn" data-range="15m">15m</button>
+                    <button type="button" class="btn btn-outline-primary time-range-btn" data-range="30m">30m</button>
+                    <button type="button" class="btn btn-outline-primary time-range-btn" data-range="1h">1h</button>
+                    <button type="button" class="btn btn-outline-primary time-range-btn" data-range="3h">3h</button>
+                    <button type="button" class="btn btn-outline-primary time-range-btn active" data-range="24h">24h</button>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="btn-group" role="group" aria-label="Sort order">
+                    <button type="button" class="btn btn-outline-secondary sort-by-btn" data-field="created" data-order="desc">Time ↓</button>
+                    <button type="button" class="btn btn-outline-secondary sort-by-btn" data-field="created" data-order="asc">Time ↑</button>
+                    <button type="button" class="btn btn-outline-secondary sort-by-btn" data-field="difference" data-order="desc">Spread ↓</button>
+                    <button type="button" class="btn btn-outline-secondary sort-by-btn" data-field="difference" data-order="asc">Spread ↑</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-10">
+                <div id="spread-info" class="alert alert-info">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <strong>SELL спред:</strong> 
+                            Медиана <span id="median-sell">0%</span> | 
+                            Мин <span id="min-sell">0%</span> | 
+                            Макс <span id="max-sell">0%</span>
+                        </div>
+                        <div>
+                            <strong>BUY спред:</strong> 
+                            Медиана <span id="median-buy">0%</span> | 
+                            Мин <span id="min-buy">0%</span> | 
+                            Макс <span id="max-buy">0%</span>
+                        </div>
+                        <div>
+                            <strong>Арбитраж:</strong> 
+                            <span id="avg-diff">0%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2 text-right">
+                <button id="toggle-live-update" class="btn btn-success">
+                    <i class="fas fa-sync-alt fa-spin"></i> Обновление <span id="live-status">ВКЛ</span>
+                </button>
+                <a href="/largest_spreads" class="btn btn-info mt-2">
+                    <i class="fas fa-chart-bar"></i> Наибольшие спреды
+                </a>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-12">
+                <div class="chart-container">
+                    <div id="chart-title" class="mb-2"></div>
+                    <canvas id="spread-chart"></canvas>
+                    <div id="chart-buttons" class="mt-2"></div>
+                    <div id="chart-nav-tip" class="mt-1"></div>
+                </div>
+            </div>
+        </div>
+        
+        <h2>Данные</h2>
+        <div class="row">
+            <div class="col-md-12">
+                <div id="data-table">
+                    <table id="spread-table" class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Время</th>
+                                <th>Символ</th>
+                                <th>Сигнал</th>
+                                <th>Exchange 1</th>
+                                <th>Exchange 2</th>
+                                <th>Цена 1</th>
+                                <th>Цена 2</th>
+                                <th>Разница (%)</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Инициализируем переменные для работы
+        let spreadChart = null;
+        let isChartInitialized = false;
+        let currentSymbol = '{{ symbols[0].symbol if symbols else "BTC_USDC_PERP" }}';
+        let currentTimeRange = '24h';
+        let currentSortBy = 'created';
+        let currentSortOrder = 'desc';
+        let currentExchangePair = '{{ exchange_pairs[0].id if exchange_pairs else "paradex_backpack" }}';
+        let lastTimestamp = 0;
+        let liveUpdateEnabled = true;
+        let updateInterval = null;
+        let userInteractingWithChart = false;
+        let aggregationLevel = 'auto';  // Уровень агрегации данных
+        
+        // Регистрируем плагин для Chart.js - явно проверяем доступность плагина
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("Chart доступен:", typeof Chart !== 'undefined');
+            console.log("ChartZoom доступен:", typeof ChartZoom !== 'undefined');
+            
+        if (typeof Chart !== 'undefined') {
+                if (typeof ChartZoom !== 'undefined') {
+                    console.log("Регистрируем ChartZoom");
+                    Chart.register(ChartZoom);
+                } else if (typeof window.ChartZoom !== 'undefined') {
+                    console.log("Регистрируем window.ChartZoom");
+                Chart.register(window.ChartZoom);
+                } else {
+                    console.warn("Плагин zoom не найден, перетаскивание/масштабирование будет недоступно");
+            }
+        }
+        });
+        
+        // Функция для определения единицы времени в зависимости от временного диапазона
+        function getTimeUnit(timeRange) {
+            switch (timeRange) {
+                case '1m':
+                    return 'minute'; // Для 1-минутного интервала
+                case '5m':
+                    return 'minute'; // Для 5-минутного интервала 
+                case '15m': 
+                    return 'minute'; // Для 15-минутного интервала
+                case '30m':
+                    return 'minute'; // Для 30-минутного интервала
+                case '1h': 
+                    return 'hour'; // Для часового интервала - часы
+                case '3h': 
+                    return 'hour'; // Для 3-часового интервала - часы
+                case '24h': 
+                    return 'day';  // Для суточного интервала - дни
+                default: 
+                    return 'hour';
+            }
+        }
+        
+        // Функция для определения размера точек в зависимости от временного диапазона
+        function getPointRadius(timeRange) {
+            switch (timeRange) {
+                case '1m':
+                    return 2;      // Для 1 минуты - средние точки
+                case '5m':
+                    return 2;      // Для 5 минут - средние точки
+                case '15m':
+                    return 1.5;    // Для 15 минут - средние точки
+                case '30m':
+                    return 1;      // Для 30 минут - маленькие точки
+                case '1h':
+                    return 0.8;    // Для часового интервала - очень маленькие точки
+                case '3h':
+                    return 0.5;    // Для 3-часового интервала - минимальные точки
+                case '24h':
+                    return 0;      // Для суточного интервала - точки не показываем совсем
+                default:
+                    return 0;
+            }
+        }
+        
+        // Initialize the page
+        $(document).ready(function() {
+            // Set the active time range button
+            $('.time-range-btn[data-range="24h"]').addClass('active');
+            
+            // Set the active sort button
+            $('.sort-by-btn[data-field="created"][data-order="desc"]').addClass('active');
+            
+            // Set the active symbol
+            $('#dropdownMenuButton').text(currentSymbol);
+            
+            // Set the active exchange pair
+            updateExchangePairDisplay();
+            
+            // Устанавливаем оптимальный уровень агрегации
+            const optimalAggregation = getOptimalAggregation(currentTimeRange);
+            $('#aggregation-select').val(optimalAggregation);
+            aggregationLevel = optimalAggregation;
+            
+            // Обработчик изменения уровня агрегации
+            $('#aggregation-select').change(function() {
+                aggregationLevel = $(this).val();
+                console.log("Изменен уровень агрегации:", aggregationLevel);
+                loadData();
+            });
+            
+            // Load the initial data
+            loadData();
+            
+            // Set up the auto-refresh interval
+            startLiveUpdate();
+            
+            // Set up live update button handler
+            $('#toggle-live-update').click(toggleLiveUpdate);
+        });
+        
+        // Toggle live update
+        function toggleLiveUpdate() {
+            if (liveUpdateEnabled) {
+                stopLiveUpdate();
+            } else {
+                startLiveUpdate();
+            }
+        }
+        
+        // Start live update
+        function startLiveUpdate() {
+            // Сначала останавливаем существующий интервал, если он есть
+            if (updateInterval) {
+                clearInterval(updateInterval);
+                updateInterval = null;
+            }
+            
+            // Получаем интервал обновления в зависимости от текущего временного диапазона
+            const interval = getUpdateInterval(currentTimeRange);
+            
+            // Устанавливаем новый интервал
+            updateInterval = setInterval(function() {
+                // Если пользователь взаимодействует с графиком, не обновляем данные
+                if (userInteractingWithChart) {
+                    console.log("Пользователь взаимодействует с графиком, обновление пропущено");
+                    return;
+                }
+                
+                console.log(`Автоматическое обновление данных для ${currentTimeRange} с интервалом ${interval}мс`);
+                loadNewData();
+            }, interval);  // Используем динамический интервал
+            
+            // Обновляем интерфейс
+            liveUpdateEnabled = true;
+            $('#live-status').text('ВКЛ');
+            $('#toggle-live-update').removeClass('btn-danger').addClass('btn-success');
+            $('#toggle-live-update i').addClass('fa-spin');
+            
+            console.log(`Автообновление запущено с интервалом ${interval}мс для ${currentTimeRange}`);
+        }
+        
+        // Stop live update
+        function stopLiveUpdate() {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+                updateInterval = null;
+                
+                liveUpdateEnabled = false;
+                $('#live-status').text('ВЫКЛ');
+                $('#toggle-live-update').removeClass('btn-success').addClass('btn-danger');
+                $('#toggle-live-update i').removeClass('fa-spin');
+                
+                console.log("Автообновление остановлено");
+            }
+        }
+        
+        // Обновляем интервал автообновления в зависимости от выбранного временного диапазона
+        function getUpdateInterval(timeRange) {
+            switch (timeRange) {
+                case '1m': return 5000;    // Каждые 5 секунд
+                case '5m': return 10000;   // Каждые 10 секунд
+                case '15m': return 15000;  // Каждые 15 секунд
+                case '30m': return 30000;  // Каждые 30 секунд
+                case '1h': return 60000;   // Каждую минуту
+                case '3h': return 180000;  // Каждые 3 минуты
+                case '24h': return 300000; // Каждые 5 минут
+                default: return 60000;     // По умолчанию каждую минуту
+            }
+        }
+        
+        // Symbol selector event handler
+        $(document).on('click', '.symbol-option', function(e) {
+            e.preventDefault();
+            currentSymbol = $(this).data('symbol');
+            $('#dropdownMenuButton').text(currentSymbol);
+            loadData();
+        });
+        
+        // Exchange pair selector event handler
+        $(document).on('click', '.exchange-pair-option', function(e) {
+            e.preventDefault();
+            currentExchangePair = $(this).data('pair');
+            updateExchangePairDisplay();
+            loadData();
+        });
+        
+        // Update the displayed exchange pair name
+        function updateExchangePairDisplay() {
+            let pairName = 'Paradex - Backpack';
+            $('.exchange-pair-option').each(function() {
+                if ($(this).data('pair') === currentExchangePair) {
+                    pairName = $(this).text();
+                }
+            });
+            $('#pair-name').text(pairName);
+        }
+        
+        // Time range selector event handler
+        $(document).on('click', '.time-range-btn', function() {
+            $('.time-range-btn').removeClass('active');
+            $(this).addClass('active');
+            currentTimeRange = $(this).data('range');
+            
+            // Логирование для отладки
+            console.log("Выбран временной диапазон:", currentTimeRange);
+            
+            // НОВАЯ ФУНКЦИЯ: Автоматически устанавливаем оптимальный уровень агрегации
+            const optimalAggregation = getOptimalAggregation(currentTimeRange);
+            $('#aggregation-select').val(optimalAggregation);
+            console.log(`Установлен оптимальный уровень агрегации: ${optimalAggregation} для ${currentTimeRange}`);
+            aggregationLevel = optimalAggregation;
+            
+            // Сбрасываем последний timestamp при изменении временного диапазона
+            lastTimestamp = 0;
+            
+            // Останавливаем предыдущий интервал обновления
+            const wasEnabled = liveUpdateEnabled;
+            if (wasEnabled) {
+                stopLiveUpdate();
+            }
+            
+            // Обновляем настройки временной оси если график уже есть
+            if (spreadChart) {
+                // Обновляем единицу времени для временной оси
+                spreadChart.options.scales.x.time.unit = getTimeUnit(currentTimeRange);
+                
+                // Обновляем размер шага для временной оси
+                spreadChart.options.scales.x.time.stepSize = getTimeStepSize(currentTimeRange);
+                
+                // Обновляем размер точек для обоих наборов данных
+                const pointRadius = getPointRadius(currentTimeRange);
+                spreadChart.data.datasets.forEach(dataset => {
+                    dataset.pointRadius = pointRadius;
+                });
+                
+                // Сбрасываем масштаб
+                if (spreadChart.resetZoom) {
+                    spreadChart.resetZoom();
+                }
+            }
+            
+            // Загружаем данные для нового временного интервала
+            loadData();
+            
+            // Восстанавливаем автообновление с небольшой задержкой, 
+            // чтобы данные успели загрузиться
+            if (wasEnabled) {
+                setTimeout(function() {
+                    console.log("Возобновление автообновления после смены временного диапазона");
+                    startLiveUpdate();
+                }, 2000);
+            }
+        });
+        
+        // Sort order selector event handler
+        $(document).on('click', '.sort-by-btn', function() {
+            $('.sort-by-btn').removeClass('active');
+            $(this).addClass('active');
+            currentSortBy = $(this).data('field');
+            currentSortOrder = $(this).data('order');
+            
+            // Временно останавливаем автообновление
+            const wasEnabled = liveUpdateEnabled;
+            if (wasEnabled) {
+                stopLiveUpdate();
+            }
+            
+            // Загружаем отсортированные данные
+            loadData();
+            
+            // Восстанавливаем автообновление если оно было включено
+            if (wasEnabled) {
+                setTimeout(function() {
+                    startLiveUpdate();
+                }, 1000);
+            }
+        });
+        
+        // Load data from the API
+        function loadData() {
+            lastTimestamp = 0;
+            
+            // Log для отладки проблемы с временным интервалом
+            console.log(`Загрузка данных: временной интервал = ${currentTimeRange}`);
+            
+            // Определяем нужный уровень агрегации для бэкенда
+            const aggregationLevel = getAggregationLevel(currentTimeRange);
+            
+            // Load the spread data
+            $.ajax({
+                url: '/data',
+                type: 'GET',
+                data: {
+                    symbol: currentSymbol,
+                    time_range: currentTimeRange,
+                    sort_by: currentSortBy,
+                    sort_order: currentSortOrder,
+                    exchange_pair: currentExchangePair,
+                    aggregation: aggregationLevel // Добавляем параметр для агрегации на бэкенде
+                },
+                dataType: 'json',
+                success: function(data) {
+                    console.log("Получены данные, количество:", data.length);
+                    
+                    // Если данных нет, нечего обновлять
+                    if (data.length === 0) {
+                        console.log("Нет данных для отображения");
+                        return;
+                    }
+                    
+                    updateCharts(data);
+                    updateTable(data);
+                    
+                    // Получаем максимальный timestamp из полученных данных
+                    let maxTimestamp = 0;
+                    data.forEach(function(item) {
+                        let timestamp = new Date(item.created).getTime();
+                        if (timestamp > maxTimestamp) {
+                            maxTimestamp = timestamp;
+                        }
+                    });
+                    
+                    // Устанавливаем lastTimestamp с небольшим смещением, чтобы избежать дублирования
+                    lastTimestamp = maxTimestamp + 1;
+                    console.log("Установлен начальный timestamp:", lastTimestamp, "для времени:", new Date(lastTimestamp).toISOString());
+                },
+                error: function(xhr, status, error) {
+                    console.error("Ошибка при загрузке данных:", error);
+                    console.log("Статус:", status);
+                    console.log("Ответ:", xhr.responseText);
+                }
+            });
+            
+            // Load the summary data
+            $.getJSON('/summary', {
+                time_range: currentTimeRange
+            }, function(data) {
+                // Display summary data relevant to the current exchange pair
+                if (data[currentExchangePair]) {
+                    const pairData = data[currentExchangePair];
+                    $('#min-sell').text((pairData.min_sell_spread || 0).toFixed(2) + '%');
+                    $('#median-sell').text((pairData.median_sell_spread || 0).toFixed(2) + '%');
+                    $('#max-sell').text((pairData.max_sell_spread || 0).toFixed(2) + '%');
+                    
+                    $('#min-buy').text((pairData.min_buy_spread || 0).toFixed(2) + '%');
+                    $('#median-buy').text((pairData.median_buy_spread || 0).toFixed(2) + '%');
+                    $('#max-buy').text((pairData.max_buy_spread || 0).toFixed(2) + '%');
+                    
+                    $('#avg-diff').text((pairData.buy_sell_diff || 0).toFixed(2) + '%');
+                }
+            });
+        }
+        
+        // Load new data since the last timestamp
+        function loadNewData() {
+            // Не обновляем, если нет последнего timestamp или отключено автообновление
+            if (!lastTimestamp || !liveUpdateEnabled) return;
+            
+            // НОВАЯ ПРОВЕРКА: Пропускаем обновление, если прошло мало времени с последнего успешного обновления
+            const currentTime = Date.now();
+            const lastSuccessfulUpdate = window.lastSuccessfulUpdate || 0;
+            const minUpdateInterval = getMinTimeIntervalMs(currentTimeRange);
+            
+            if (lastSuccessfulUpdate > 0 && currentTime - lastSuccessfulUpdate < minUpdateInterval) {
+                console.log(`Пропуск обновления: прошло ${(currentTime - lastSuccessfulUpdate)/1000}с, минимум ${minUpdateInterval/1000}с`);
+                return;
+            }
+            
+            // Форматируем дату в строку для наглядности в логах
+            const formattedTime = new Date(lastTimestamp).toISOString();
+            console.log(`Запрос новых данных с timestamp: ${lastTimestamp} Формат времени: ${formattedTime}`);
+            
+            // Определяем текущий уровень агрегации
+            const currentAggregation = $('#aggregation-select').val();
+            
+            $.ajax({
+                url: '/data',
+                type: 'GET',
+                data: {
+                    symbol: currentSymbol,
+                    time_range: currentTimeRange,
+                    sort_by: currentSortBy,
+                    sort_order: currentSortOrder,
+                    exchange_pair: currentExchangePair,
+                    since: lastTimestamp,
+                    aggregation: currentAggregation // Используем выбранный уровень агрегации
+                },
+                dataType: 'json',
+                success: function(data) {
+                    console.log("Получено новых данных:", data.length);
+                    
+                    if (data.length > 0) {
+                        // Отладочная информация
+                        console.log("Первая запись:", data[0].created, "Последняя запись:", data[data.length - 1].created);
+                        
+                        // Update the charts and table with the new data
+                        addNewDataToCharts(data);
+                        addNewDataToTable(data);
+                        
+                        // Правильно обновляем последний timestamp
+                        let maxTimestamp = lastTimestamp;
+                        data.forEach(function(item) {
+                            let timestamp = new Date(item.created).getTime();
+                            if (timestamp > maxTimestamp) {
+                                maxTimestamp = timestamp;
+                            }
+                        });
+                        
+                        // Добавляем небольшую задержку (1 мс) чтобы не получать повторно те же данные
+                        lastTimestamp = maxTimestamp + 1;
+                        // Запоминаем время последнего успешного обновления
+                        window.lastSuccessfulUpdate = currentTime;
+                        console.log("Обновлен timestamp:", lastTimestamp, "Новое время:", new Date(lastTimestamp).toISOString());
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error("Ошибка при запросе новых данных:", error);
+                    console.log("Статус:", status);
+                    console.log("Детали ошибки:", xhr.responseText);
+                }
+            });
+        }
+        
+        // Функция для определения минимального интервала времени между обновлениями
+        function getMinUpdateTime(timeRange) {
+            switch (timeRange) {
+                case '1m': return 10000;     // Минимум 10 секунд для 1-минутного графика
+                case '5m': return 30000;     // Минимум 30 секунд для 5-минутного графика
+                case '15m': return 60000;    // Минимум 1 минута для 15-минутного графика
+                case '30m': return 120000;   // Минимум 2 минуты для 30-минутного графика
+                case '1h': return 300000;    // Минимум 5 минут для часового графика
+                case '3h': return 600000;    // Минимум 10 минут для 3-часового графика
+                case '24h': return 1800000;  // Минимум 30 минут для суточного графика
+                default: return 60000;       // По умолчанию минимум 1 минута
+            }
+        }
+        
+        // Update the charts with the given data - Chart.js implementation
+        function updateCharts(data) {
+            // Агрегируем данные в зависимости от временного диапазона
+            const aggregatedData = aggregateDataByTimeRange(data, currentTimeRange);
+            
+            // Получаем данные для линейных графиков
+            const buyPoints = aggregatedData.filter(item => item.signal === 'BUY');
+            const sellPoints = aggregatedData.filter(item => item.signal === 'SELL');
+            
+            // Parse timestamps and sort by time for proper line display
+            buyPoints.sort((a, b) => new Date(a.created) - new Date(b.created));
+            sellPoints.sort((a, b) => new Date(a.created) - new Date(b.created));
+            
+            // Format data for Chart.js
+            const buyData = buyPoints.map(item => ({
+                x: new Date(item.created),
+                y: item.difference
+            }));
+            
+            const sellData = sellPoints.map(item => ({
+                x: new Date(item.created),
+                y: item.difference
+            }));
+            
+            // Define exchange names
+            let exchange1 = '';
+            let exchange2 = '';
+            if (data.length > 0) {
+                exchange1 = data[0].exchange1 || 'Exchange 1';
+                exchange2 = data[0].exchange2 || 'Exchange 2';
+                
+                // Capitalize first letter
+                exchange1 = exchange1.charAt(0).toUpperCase() + exchange1.slice(1);
+                exchange2 = exchange2.charAt(0).toUpperCase() + exchange2.slice(1);
+            }
+            
+            // Destroy existing chart if it exists
+            if (spreadChart) {
+                spreadChart.destroy();
+            }
+            
+            // Create new chart config
+            const ctx = document.getElementById('spread-chart').getContext('2d');
+            
+            // Проверяем доступность плагина zoom
+            const zoomPluginAvailable = typeof ChartZoom !== 'undefined' || 
+                                    typeof window.ChartZoom !== 'undefined';
+            
+            console.log("Создание графика, доступность плагина zoom:", zoomPluginAvailable);
+            
+            // Конфигурация для линейного графика
+            const chartConfig = {
+                type: 'line',
+                data: {
+                    datasets: [
+                        {
+                            label: `BUY Spread (${exchange1}->${exchange2})`,
+                            data: buyData,
+                            borderColor: 'rgba(75, 192, 75, 1)',
+                            backgroundColor: 'rgba(75, 192, 75, 0.2)',
+                            pointRadius: getPointRadius(currentTimeRange),
+                            pointHoverRadius: 5,
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0.1 // Немного сглаживания для красоты
+                        },
+                        {
+                            label: `SELL Spread (${exchange2}->${exchange1})`,
+                            data: sellData,
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                            pointRadius: getPointRadius(currentTimeRange),
+                            pointHoverRadius: 5,
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0.1
+                        }
+                    ]
+                },
+                options: getLineChartOptions(exchange1, exchange2)
+            };
+            
+            // Создаем график
+            spreadChart = new Chart(ctx, chartConfig);
+            
+            // Добавляем кнопки управления и сбрасываем масштаб
+            addChartButtons(exchange1, exchange2);
+            
+            // Устанавливаем пользовательское взаимодействие
+            setupChartInteractions();
+        }
+        
+        // Получить настройки для линейного графика
+        function getLineChartOptions(exchange1, exchange2) {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    tooltip: {
+                        enabled: true,
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += context.parsed.y.toFixed(2) + '%';
+                                }
+                                return label;
+                            }
+                        }
+                    },
+                    zoom: {
+                        pan: {
+                            enabled: true,
+                            mode: 'xy',
+                            modifierKey: null,
+                            // Удаляем speed и threshold, которые могут вызывать проблемы
+                            // Отключаем onPan и onPanComplete, так как они могут конфликтовать
+                        },
+                        zoom: {
+                            wheel: {
+                                enabled: true,
+                                speed: 0.1  // Замедляем скорость масштабирования для лучшего контроля
+                            },
+                            pinch: {
+                                enabled: true
+                            },
+                            mode: 'xy',
+                            // Упрощаем обработчики событий
+                            onZoom: function() {
+                                userInteractingWithChart = true;
+                                if (liveUpdateEnabled) {
+                                    stopLiveUpdate();
+                                }
+                            },
+                            onZoomComplete: function() {
+                                setTimeout(function() {
+                                    userInteractingWithChart = false;
+                                    if (!liveUpdateEnabled) {
+                                        startLiveUpdate();
+                                    }
+                                }, 3000);
+                            }
+                        },
+                        limits: {
+                            // Без ограничений по осям
+                            x: {min: 'original', max: 'original'},
+                            y: {min: 'original', max: 'original'}
+                        }
+                    },
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            boxWidth: 20,
+                            padding: 20
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: `Спред по паре ${exchange1}-${exchange2} для ${currentSymbol}`,
+                        font: {
+                            size: 16
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: getTimeUnit(currentTimeRange),
+                            tooltipFormat: 'yyyy-MM-dd HH:mm:ss',
+                            displayFormats: {
+                                second: 'HH:mm:ss',
+                                minute: 'HH:mm',
+                                hour: 'HH:mm',
+                                day: 'dd.MM',
+                                week: 'dd.MM.yyyy'
+                            },
+                            stepSize: getTimeStepSize(currentTimeRange)
+                        },
+                        title: {
+                            display: true,
+                            text: 'Время'
+                        },
+                        ticks: {
+                            maxTicksLimit: 10,
+                            autoSkip: true
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Разница (%)'
+                        },
+                        ticks: {
+                            callback: function(value) {
+                                return value.toFixed(2) + '%';
+                            }
+                        }
+                    }
+                }
+            };
+        }
+        
+        // Функция для настройки взаимодействия с графиком (замена setupChartDragEvents)
+        function setupChartInteractions() {
+            if (!spreadChart) return;
+            
+            const canvas = spreadChart.canvas;
+            
+            // Добавляем класс для правильного стиля курсора
+            $(canvas).css('cursor', 'grab');
+            
+            // Мониторинг взаимодействия с графиком для управления автообновлением
+            const handleInteractionStart = function() {
+                userInteractingWithChart = true;
+                if (liveUpdateEnabled) {
+                    stopLiveUpdate();
+                }
+                $(canvas).css('cursor', 'grabbing');
+            };
+            
+            const handleInteractionEnd = function() {
+                $(canvas).css('cursor', 'grab');
+                setTimeout(function() {
+                    userInteractingWithChart = false;
+                    if (!liveUpdateEnabled) {
+                        startLiveUpdate();
+                    }
+                }, 3000);
+            };
+            
+            // Убираем сообщение пользователю о масштабировании
+            try {
+                // Проверяем наличие плагина и его функций
+                if (spreadChart.resetZoom) {
+                    console.log("Плагин zoom успешно инициализирован");
+                } else {
+                    console.warn("Метод resetZoom не найден");
+                }
+            } catch (e) {
+                console.error("Ошибка при проверке плагина zoom:", e);
+            }
+            
+            // Добавляем явные обработчики событий для управления курсором
+            canvas.addEventListener('mousedown', function() {
+                $(canvas).css('cursor', 'grabbing');
+            });
+            
+            canvas.addEventListener('mouseup', function() {
+                $(canvas).css('cursor', 'grab');
+            });
+            
+            canvas.addEventListener('mouseleave', function() {
+                $(canvas).css('cursor', 'grab');
+            });
+        }
+        
+        // Добавить кнопки управления графиком
+        function addChartButtons(exchange1, exchange2) {
+            // Очищаем контейнер кнопок и добавляем только необходимое
+            $('#chart-buttons').empty();
+            
+            // Добавляем заголовок с текущим символом и парой бирж
+            $('#chart-title').html(`
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h3>Спред по паре ${exchange1}-${exchange2} для ${currentSymbol}</h3>
+                    <div class="d-flex align-items-center bg-light p-2 rounded">
+                        <div class="text-primary mr-3">
+                            <i class="fas fa-mouse-pointer"></i>
+                            <span style="font-weight: 500; font-size: 0.9rem;">Колесо - масштаб, перетаскивание - навигация</span>
+                        </div>
+                        <button class="btn btn-primary btn-sm reset-zoom-btn">
+                            <i class="fas fa-search-minus mr-1"></i>Сбросить
+                        </button>
+                    </div>
+                </div>
+            `);
+            
+            // Очищаем старую подсказку, так как она теперь перемещена в заголовок
+            $('#chart-nav-tip').html('');
+            
+            // Назначаем обработчики событий
+            $('.reset-zoom-btn').on('click', function() {
+                if (spreadChart && spreadChart.resetZoom) {
+                    try {
+                        spreadChart.resetZoom();
+                    } catch (err) {
+                        console.error("Ошибка при сбросе масштаба:", err);
+                    }
+                }
+            });
+        }
+        
+        // Функция для агрегации данных по временным интервалам
+        function aggregateDataByTimeRange(data, timeRange) {
+            if (!data || data.length === 0) return [];
+            
+            // Для очень коротких интервалов можем не агрегировать
+            if (data.length < 50) return data;
+            
+            // Результаты для OHLC данных по типу сигналов
+            const buyOHLC = {};
+            const sellOHLC = {};
+            
+            // Определяем интервал агрегации в зависимости от временного диапазона
+            let intervalInSeconds;
+            switch (timeRange) {
+                case '1m': intervalInSeconds = 60; break;     // Агрегируем по 1 минуте
+                case '5m': intervalInSeconds = 300; break;    // Агрегируем по 5 минут
+                case '15m': intervalInSeconds = 900; break;   // Агрегируем по 15 минут
+                case '30m': intervalInSeconds = 1800; break;  // Агрегируем по 30 минут
+                case '1h': intervalInSeconds = 3600; break;   // Агрегируем по 1 часу
+                case '3h': intervalInSeconds = 10800; break;  // Агрегируем по 3 часа
+                case '24h': intervalInSeconds = 86400; break; // Агрегируем по 1 дню (24 часа)
+                default: return data;                         // По умолчанию не агрегируем
+            }
+            
+            // Группируем данные по времени и типу сигнала для OHLC
+            data.forEach(item => {
+                const date = new Date(item.created);
+                
+                // Округляем время до нужного интервала в секундах
+                const totalSeconds = Math.floor(date.getTime() / 1000);
+                const roundedSeconds = Math.floor(totalSeconds / intervalInSeconds) * intervalInSeconds;
+                
+                // Создаем новую дату с округленным временем
+                const roundedDate = new Date(roundedSeconds * 1000);
+                const timeKey = roundedDate.toISOString();
+                
+                // Группируем по типу сигнала для OHLC
+                if (item.signal === 'BUY') {
+                    if (!buyOHLC[timeKey]) {
+                        buyOHLC[timeKey] = {
+                            open: item.difference,
+                            high: item.difference,
+                            low: item.difference,
+                            close: item.difference,
+                            time: roundedDate,
+                            count: 1,
+                            volume: 1,
+                            metadata: { ...item, created: roundedDate.toISOString() }
+                        };
+                    } else {
+                        // Обновляем OHLC данные
+                        buyOHLC[timeKey].high = Math.max(buyOHLC[timeKey].high, item.difference);
+                        buyOHLC[timeKey].low = Math.min(buyOHLC[timeKey].low, item.difference);
+                        buyOHLC[timeKey].close = item.difference; // Последнее значение
+                        buyOHLC[timeKey].count += 1;
+                        buyOHLC[timeKey].volume += 1;
+                    }
+                } else if (item.signal === 'SELL') {
+                    if (!sellOHLC[timeKey]) {
+                        sellOHLC[timeKey] = {
+                            open: item.difference,
+                            high: item.difference,
+                            low: item.difference,
+                            close: item.difference,
+                            time: roundedDate,
+                            count: 1,
+                            volume: 1,
+                            metadata: { ...item, created: roundedDate.toISOString() }
+                        };
+                    } else {
+                        // Обновляем OHLC данные
+                        sellOHLC[timeKey].high = Math.max(sellOHLC[timeKey].high, item.difference);
+                        sellOHLC[timeKey].low = Math.min(sellOHLC[timeKey].low, item.difference);
+                        sellOHLC[timeKey].close = item.difference; // Последнее значение
+                        sellOHLC[timeKey].count += 1;
+                        sellOHLC[timeKey].volume += 1;
+                    }
+                }
+            });
+            
+            // Преобразуем OHLC данные обратно в массивы
+            const buyResults = Object.values(buyOHLC);
+            const sellResults = Object.values(sellOHLC);
+            
+            // Сортируем по времени
+            buyResults.sort((a, b) => a.time.getTime() - b.time.getTime());
+            sellResults.sort((a, b) => a.time.getTime() - b.time.getTime());
+            
+            // Объединяем результаты для совместимости с предыдущим кодом
+            const lineDataBuy = buyResults.map(item => {
+                return {
+                    ...item.metadata,
+                    difference: item.close
+                };
+            });
+            
+            const lineDataSell = sellResults.map(item => {
+                return {
+                    ...item.metadata,
+                    difference: item.close
+                };
+            });
+            
+            return [...lineDataBuy, ...lineDataSell];
+        }
+        
+        // Определяет шаг для временной оси в зависимости от диапазона
+        function getTimeStepSize(timeRange) {
+            switch (timeRange) {
+                case '1m': return 1;    // Каждая минута
+                case '5m': return 1;    // Каждая минута
+                case '15m': return 5;   // Каждые 5 минут
+                case '30m': return 10;  // Каждые 10 минут
+                case '1h': return 20;   // Каждые 20 минут
+                case '3h': return 1;    // Каждый час
+                case '24h': return 6;   // Каждые 6 часов
+                default: return 1;
+            }
+        }
+        
+        // Функция для определения уровня агрегации данных на бэкенде
+        function getAggregationLevel(timeRange) {
+            switch (timeRange) {
+                case '1m': return 'minute1';   // По 1 минуте
+                case '5m': return 'minute5';   // По 5 минут
+                case '15m': return 'minute15'; // По 15 минут
+                case '30m': return 'minute30'; // По 30 минут
+                case '1h': return 'hour';      // По часам
+                case '3h': return 'hour3';     // По 3 часа
+                case '24h': return 'day';      // По дням
+                default: return 'none';
+            }
+        }
+        
+        // Add new data to the chart - Chart.js implementation
+        function addNewDataToCharts(newData) {
+            if (!spreadChart) return;
+            
+            // ИСПРАВЛЕНИЕ: Определяем минимальный временной интервал для выбранного таймфрейма
+            const minTimeInterval = getMinTimeIntervalMs(currentTimeRange);
+            
+            // Агрегируем новые данные
+            const aggregatedData = aggregateDataByTimeRange(newData, currentTimeRange);
+            
+            // Для линейного графика фильтруем новые данные
+            const buyPoints = aggregatedData.filter(item => item.signal === 'BUY');
+            const sellPoints = aggregatedData.filter(item => item.signal === 'SELL');
+            
+            // Если нет данных, нечего обновлять
+            if (buyPoints.length === 0 && sellPoints.length === 0) return;
+            
+            // Функция для обновления или добавления данных в датасет
+            function updateOrAddDataPoints(dataset, newPoints) {
+                // Создаем Map существующих точек по времени
+                const existingPointsMap = new Map();
+                dataset.data.forEach((point, index) => {
+                    const pointTime = point.x instanceof Date ? point.x.getTime() : new Date(point.x).getTime();
+                    existingPointsMap.set(pointTime, { point, index });
+                });
+                
+                // Проходим по новым точкам
+                newPoints.forEach(point => {
+                    const newDate = new Date(point.created);
+                    const timeKey = newDate.getTime();
+                    
+                    // Проверяем, есть ли уже точка с таким временем
+                    if (existingPointsMap.has(timeKey)) {
+                        // Обновляем существующую точку
+                        const existingPoint = existingPointsMap.get(timeKey);
+                        existingPoint.point.y = Number(point.difference);
+                    } else {
+                        // Если точки с таким временем нет, добавляем новую
+                        dataset.data.push({
+                            x: newDate,
+                            y: Number(point.difference)
+                        });
+                    }
+                });
+            }
+            
+            // Обновляем или добавляем данные для BUY
+            if (buyPoints.length > 0) {
+                updateOrAddDataPoints(spreadChart.data.datasets[0], buyPoints);
+            }
+            
+            // Обновляем или добавляем данные для SELL
+            if (sellPoints.length > 0) {
+                updateOrAddDataPoints(spreadChart.data.datasets[1], sellPoints);
+            }
+            
+            // Сортируем данные по времени для корректного отображения линий
+            spreadChart.data.datasets[0].data.sort((a, b) => a.x - b.x);
+            spreadChart.data.datasets[1].data.sort((a, b) => a.x - b.x);
+            
+            // Обновляем настройки отображения точек в зависимости от временного диапазона
+            spreadChart.data.datasets[0].pointRadius = getPointRadius(currentTimeRange);
+            spreadChart.data.datasets[1].pointRadius = getPointRadius(currentTimeRange);
+            
+            // Ограничиваем количество точек на графике для производительности
+            const maxPoints = 5000;
+            if (spreadChart.data.datasets[0].data.length > maxPoints) {
+                spreadChart.data.datasets[0].data = spreadChart.data.datasets[0].data.slice(-maxPoints);
+            }
+            if (spreadChart.data.datasets[1].data.length > maxPoints) {
+                spreadChart.data.datasets[1].data = spreadChart.data.datasets[1].data.slice(-maxPoints);
+            }
+            
+            // Обновляем график
+            spreadChart.update();
+        }
+        
+        // НОВАЯ ФУНКЦИЯ: Округляет время до нужного интервала в зависимости от таймфрейма
+        function roundToTimeInterval(dateObj, timeRange) {
+            switch (timeRange) {
+                case '1m':
+                    // Округляем до минут
+                    dateObj.setSeconds(0);
+                    dateObj.setMilliseconds(0);
+                    break;
+                case '5m':
+                    // Округляем до 5-минутных интервалов
+                    dateObj.setMinutes(Math.floor(dateObj.getMinutes() / 5) * 5);
+                    dateObj.setSeconds(0);
+                    dateObj.setMilliseconds(0);
+                    break;
+                case '15m':
+                    // Округляем до 15-минутных интервалов
+                    dateObj.setMinutes(Math.floor(dateObj.getMinutes() / 15) * 15);
+                    dateObj.setSeconds(0);
+                    dateObj.setMilliseconds(0);
+                    break;
+                case '30m':
+                    // Округляем до 30-минутных интервалов
+                    dateObj.setMinutes(Math.floor(dateObj.getMinutes() / 30) * 30);
+                    dateObj.setSeconds(0);
+                    dateObj.setMilliseconds(0);
+                    break;
+                case '1h':
+                    // Округляем до часов
+                    dateObj.setMinutes(0);
+                    dateObj.setSeconds(0);
+                    dateObj.setMilliseconds(0);
+                    break;
+                case '3h':
+                    // Округляем до 3-часовых интервалов
+                    dateObj.setHours(Math.floor(dateObj.getHours() / 3) * 3);
+                    dateObj.setMinutes(0);
+                    dateObj.setSeconds(0);
+                    dateObj.setMilliseconds(0);
+                    break;
+                case '24h':
+                    // Округляем до дней
+                    dateObj.setHours(0);
+                    dateObj.setMinutes(0);
+                    dateObj.setSeconds(0);
+                    dateObj.setMilliseconds(0);
+                    break;
+                default:
+                    // По умолчанию округляем до минут
+                    dateObj.setSeconds(0);
+                    dateObj.setMilliseconds(0);
+            }
+        }
+        
+        // НОВАЯ ФУНКЦИЯ: Определяет минимальный временной интервал между обновлениями для выбранного таймфрейма
+        function getMinTimeIntervalMs(timeRange) {
+            switch (timeRange) {
+                case '1m': return 30000;      // 30 секунд для минутного графика
+                case '5m': return 60000;      // 1 минута для 5-минутного графика
+                case '15m': return 120000;    // 2 минуты для 15-минутного графика
+                case '30m': return 300000;    // 5 минут для 30-минутного графика
+                case '1h': return 600000;     // 10 минут для часового графика
+                case '3h': return 1800000;    // 30 минут для 3-часового графика
+                case '24h': return 3600000;   // 1 час для суточного графика
+                default: return 60000;        // 1 минута по умолчанию
+            }
+        }
+        
+        // НОВАЯ ФУНКЦИЯ: Определяет оптимальный уровень агрегации для выбранного временного диапазона
+        function getOptimalAggregation(timeRange) {
+            switch (timeRange) {
+                case '1m': return 'none';     // Без агрегации для минутного графика
+                case '5m': return 'minute1';  // Агрегация по 1 минуте для 5-минутного графика
+                case '15m': return 'minute5'; // Агрегация по 5 минут для 15-минутного графика
+                case '30m': return 'minute5'; // Агрегация по 5 минут для 30-минутного графика
+                case '1h': return 'minute15'; // Агрегация по 15 минут для часового графика
+                case '3h': return 'minute30'; // Агрегация по 30 минут для 3-часового графика
+                case '24h': return 'hour';    // Агрегация по часам для суточного графика
+                default: return 'auto';       // Автоматический выбор
+            }
+        }
+        
+        // Update the data table
+        function updateTable(data) {
+            const tbody = $('#spread-table tbody');
+            tbody.empty();
+            
+            data.forEach(function(item) {
+                const row = $('<tr></tr>');
+                
+                // Получаем форматированные имена бирж или используем запасные
+                const exchange1 = item.formatted_exchange1 || (item.exchange1 ? item.exchange1.charAt(0).toUpperCase() + item.exchange1.slice(1) : 'Exchange 1');
+                const exchange2 = item.formatted_exchange2 || (item.exchange2 ? item.exchange2.charAt(0).toUpperCase() + item.exchange2.slice(1) : 'Exchange 2');
+                
+                // Определяем, есть ли сырые данные от Paradex
+                const hasParadexRawPrice = item.has_raw_prices && item.paradex_raw_price && item.paradex_contract_size;
+                const isParadexInvolved = item.exchange1 === 'paradex' || item.exchange2 === 'paradex';
+                
+                // Получаем и форматируем цены с учетом сырых данных Paradex
+                let price1 = 0;
+                let price2 = 0;
+                
+                // Если это Paradex и у нас есть сырые цены, используем их для отображения
+                if (isParadexInvolved && hasParadexRawPrice) {
+                    // Определяем, какая биржа - Paradex
+                    const paradexIsExchange1 = item.exchange1 === 'paradex';
+                    
+                    if (paradexIsExchange1) {
+                        // Используем сырую цену для Paradex
+                        price1 = item.paradex_raw_price;
+                        // Используем обычную цену для второй биржи
+                        price2 = item[`${item.exchange2}_price`];
+                    } else {
+                        // Используем обычную цену для первой биржи
+                        price1 = item[`${item.exchange1}_price`];
+                        // Используем сырую цену для Paradex
+                        price2 = item.paradex_raw_price;
+                    }
+                } else {
+                    // Используем стандартные цены
+                    price1 = item.buy_price || item[`${item.exchange1}_price`] || 0;
+                    price2 = item.sell_price || item[`${item.exchange2}_price`] || 0;
+                }
+                
+                // Форматируем цены в зависимости от их величины
+                const formattedPrice1 = formatPrice(price1);
+                const formattedPrice2 = formatPrice(price2);
+                
+                // Форматируем время
+                const dateObj = new Date(item.created);
+                const formattedTime = dateObj.toLocaleTimeString();
+                
+                row.append(`<td>${item.id}</td>`);
+                row.append(`<td>${formattedTime}</td>`);
+                row.append(`<td>${item.symbol}</td>`);
+                row.append(`<td>${item.signal}</td>`);
+                row.append(`<td>${exchange1}</td>`);
+                row.append(`<td>${exchange2}</td>`);
+                row.append(`<td>${formattedPrice1}</td>`);
+                row.append(`<td>${formattedPrice2}</td>`);
+                row.append(`<td>${Number(item.difference).toFixed(2)}%</td>`);
+                
+                tbody.append(row);
+            });
+        }
+        
+        // Функция для форматирования цены в зависимости от ее величины
+        function formatPrice(price) {
+            if (!price) return '0.000';
+            
+            // Для больших чисел (>10000) показываем без десятичных знаков
+            if (price >= 10000) {
+                return price.toFixed(0);
+            } 
+            // Для средних чисел (>100) показываем с одним знаком
+            else if (price >= 100) {
+                return price.toFixed(1);
+            } 
+            // Для малых чисел показываем с тремя знаками
+            else {
+                return price.toFixed(3);
+            }
+        }
+        
+        // Add new data to the existing table
+        function addNewDataToTable(data) {
+            const tbody = $('#spread-table tbody');
+            
+            data.forEach(function(item) {
+                const row = $('<tr></tr>');
+                
+                // Получаем форматированные имена бирж или используем запасные
+                const exchange1 = item.formatted_exchange1 || (item.exchange1 ? item.exchange1.charAt(0).toUpperCase() + item.exchange1.slice(1) : 'Exchange 1');
+                const exchange2 = item.formatted_exchange2 || (item.exchange2 ? item.exchange2.charAt(0).toUpperCase() + item.exchange2.slice(1) : 'Exchange 2');
+                
+                // Определяем, есть ли сырые данные от Paradex
+                const hasParadexRawPrice = item.has_raw_prices && item.paradex_raw_price && item.paradex_contract_size;
+                const isParadexInvolved = item.exchange1 === 'paradex' || item.exchange2 === 'paradex';
+                
+                // Получаем и форматируем цены с учетом сырых данных Paradex
+                let price1 = 0;
+                let price2 = 0;
+                
+                // Если это Paradex и у нас есть сырые цены, используем их для отображения
+                if (isParadexInvolved && hasParadexRawPrice) {
+                    // Определяем, какая биржа - Paradex
+                    const paradexIsExchange1 = item.exchange1 === 'paradex';
+                    
+                    if (paradexIsExchange1) {
+                        // Используем сырую цену для Paradex
+                        price1 = item.paradex_raw_price;
+                        // Используем обычную цену для второй биржи
+                        price2 = item[`${item.exchange2}_price`];
+                    } else {
+                        // Используем обычную цену для первой биржи
+                        price1 = item[`${item.exchange1}_price`];
+                        // Используем сырую цену для Paradex
+                        price2 = item.paradex_raw_price;
+                    }
+                } else {
+                    // Используем стандартные цены
+                    price1 = item.buy_price || item[`${item.exchange1}_price`] || 0;
+                    price2 = item.sell_price || item[`${item.exchange2}_price`] || 0;
+                }
+                
+                // Форматируем цены в зависимости от их величины
+                const formattedPrice1 = formatPrice(price1);
+                const formattedPrice2 = formatPrice(price2);
+                
+                // Форматируем время
+                const dateObj = new Date(item.created);
+                const formattedTime = dateObj.toLocaleTimeString();
+                
+                row.append(`<td>${item.id}</td>`);
+                row.append(`<td>${formattedTime}</td>`);
+                row.append(`<td>${item.symbol}</td>`);
+                row.append(`<td>${item.signal}</td>`);
+                row.append(`<td>${exchange1}</td>`);
+                row.append(`<td>${exchange2}</td>`);
+                row.append(`<td>${formattedPrice1}</td>`);
+                row.append(`<td>${formattedPrice2}</td>`);
+                row.append(`<td>${Number(item.difference).toFixed(2)}%</td>`);
+                
+                // Add the new row at the beginning of the table
+                tbody.prepend(row);
+            });
+        }
+    </script>
+</body>
+</html>

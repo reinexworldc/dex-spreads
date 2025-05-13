@@ -1,0 +1,71 @@
+{
+    "SAVE_FOLDER": "data",
+    "PARADEX_DATA": {
+        "TESTNET" : false,
+        "apiKey": "",
+        "apiSecret": ""
+    },
+    "HYPERLIQUID_DATA": {
+        "TESTNET": false,
+        "SYMBOLS": [
+            "BTC",
+            "ETH",
+            "HYPE",
+            "SOL",
+            "XRP",
+            "BNB",
+            "WIF",
+            "ADA",
+            "DOT",
+            "AAVE",
+            "DOGE",
+            "LTC",
+            "LINK",
+            "JUP",
+            "SUI",
+            "AVAX",
+            "ARB"
+        ],
+        "apiKey": "",
+        "apiSecret": ""
+    },
+    "BACKPACK_DATA": {
+        "SYMBOLS" : [
+            "BTC_USDC_PERP",
+            "ETH_USDC_PERP",
+            "HYPE_USDC_PERP",
+            "SOL_USDC_PERP",
+            "XRP_USDC_PERP",
+            "BNB_USDC_PERP",
+            "WIF_USDC_PERP",
+            "ADA_USDC_PERP",
+            "DOT_USDC_PERP",
+            "AAVE_USDC_PERP",
+            "DOGE_USDC_PERP",
+            "LTC_USDC_PERP",
+            "LINK_USDC_PERP",
+            "JUP_USDC_PERP",
+            "SUI_USDC_PERP",
+            "AVAX_USDC_PERP",
+            "ARB_USDC_PERP",
+            "ONDO_USDC_PERP",
+            "ENA_USDC_PERP",
+            "S_USDC_PERP",
+            "KAITO_USDC_PERP",
+            "FARTCOIN_USDC_PERP",
+            "BERA_USDC_PERP",
+            "TRUMP_USDC_PERP",
+            "IP_USDC_PERP"
+        ],
+        "apiKey": "",
+        "apiSecret": ""
+    },
+    "TRADER_DATA": {
+        "MIN_DIFFERENCE": -3,
+        "apiKey": "",
+        "apiSecret": ""
+    },
+    "INTERVAL": 1,
+    "DEBUG": false,
+    "LOG_LEVEL": "INFO"
+}

@@ -1,0 +1,114 @@
+2025-05-06 02:40:23,191 - paradex_data_import - ERROR - Ошибка при выполнении скрипта: Paradex.__init__() got an unexpected keyword argument 'api_key'
+2025-05-06 02:40:54,960 - paradex_app.paradex - INFO - [INFO] Успешно подключен к Paradex WebSocket
+2025-05-06 02:40:54,961 - paradex_data_import - INFO - Подключение к Paradex установлено
+2025-05-06 02:40:54,961 - paradex_app.paradex - INFO - Начинаю загрузку размеров контрактов с API Paradex...
+2025-05-06 02:40:54,961 - paradex_app.paradex - WARNING - JWT токен не предоставлен, запрос может быть ограничен
+2025-05-06 02:40:54,961 - paradex_app.paradex - ERROR - Ошибка при загрузке размеров контрактов: 'NoneType' object has no attribute 'get'
+2025-05-06 02:40:54,961 - paradex_app.paradex - ERROR - Traceback (most recent call last):
+  File "/home/excalibur/paradex_parser_reinex/py/paradex.py", line 100, in _load_contract_sizes
+    async with self.session.get(f"{self._api_url}/markets", headers=headers, ssl=False) as response:
+AttributeError: 'NoneType' object has no attribute 'get'
+
+2025-05-06 02:40:54,962 - paradex_data_import - INFO - Размеры контрактов: {}
+2025-05-06 02:40:54,962 - paradex_data_import - INFO - Получение данных о рынках Paradex...
+2025-05-06 02:40:54,962 - paradex_app.paradex - WARNING - Нет данных рынков, пытаемся получить резервные данные
+2025-05-06 02:40:54,962 - paradex_app.paradex - INFO - Запрос резервных данных через REST API Paradex...
+2025-05-06 02:40:54,962 - paradex_app.paradex - INFO - Начинаю загрузку размеров контрактов с API Paradex...
+2025-05-06 02:40:54,962 - paradex_app.paradex - WARNING - JWT токен не предоставлен, запрос может быть ограничен
+2025-05-06 02:40:56,163 - paradex_app.paradex - INFO - Получен ответ от API markets со статусом: 200
+2025-05-06 02:40:56,450 - paradex_app.paradex - WARNING - API не вернул данные о рынках в ответе
+2025-05-06 02:40:56,452 - paradex_app.paradex - INFO - Получен ответ API markets: 0 контрактов
+2025-05-06 02:40:56,452 - paradex_app.paradex - INFO - Установлено стандартное значение для BTC-USD-PERP: 0.001
+2025-05-06 02:40:56,452 - paradex_app.paradex - INFO - Установлено стандартное значение для ETH-USD-PERP: 0.01
+2025-05-06 02:40:56,452 - paradex_app.paradex - INFO - Установлено стандартное значение для SOL-USD-PERP: 0.1
+2025-05-06 02:40:56,452 - paradex_app.paradex - WARNING - Не удалось получить размер контракта для BTC-USD-PERP из API, используется стандартное значение: 0.001
+2025-05-06 02:40:56,453 - paradex_app.paradex - WARNING - Не удалось получить размер контракта для ETH-USD-PERP из API, используется стандартное значение: 0.01
+2025-05-06 02:40:56,453 - paradex_app.paradex - WARNING - Не удалось получить размер контракта для SOL-USD-PERP из API, используется стандартное значение: 0.1
+2025-05-06 02:40:56,453 - paradex_app.paradex - INFO - Итоги загрузки размеров контрактов:
+2025-05-06 02:40:56,453 - paradex_app.paradex - INFO - - Успешно загружено: 0 символов
+2025-05-06 02:40:56,453 - paradex_app.paradex - INFO - - Ошибки загрузки: 0 символов
+2025-05-06 02:40:56,453 - paradex_app.paradex - INFO - - Отсутствуют важные символы: BTC-USD-PERP, ETH-USD-PERP, SOL-USD-PERP
+2025-05-06 02:40:56,453 - paradex_app.paradex - INFO - Итоговый размер контракта для BTC-USD-PERP: 0.001
+2025-05-06 02:40:56,453 - paradex_app.paradex - INFO - Итоговый размер контракта для ETH-USD-PERP: 0.01
+2025-05-06 02:40:56,453 - paradex_app.paradex - INFO - Итоговый размер контракта для SOL-USD-PERP: 0.1
+2025-05-06 02:40:56,743 - paradex_app.paradex - ERROR - Ошибка при запросе BBO: 401
+2025-05-06 02:40:56,744 - paradex_app.paradex - ERROR - Ошибка аутентификации API (401). Проверьте JWT токен.
+2025-05-06 02:40:56,744 - paradex_data_import - INFO - Получено 2 рынков
+2025-05-06 02:40:56,744 - paradex_data_import - ERROR - Ошибка при работе с Paradex: string indices must be integers
+2025-05-06 02:40:56,744 - paradex_data_import - ERROR - Ошибка при выполнении скрипта: 'Paradex' object has no attribute 'close'
+2025-05-06 02:40:56,745 - asyncio - ERROR - Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f15b0edc1c0>
+2025-05-06 02:40:56,745 - asyncio - ERROR - Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7f15b0d934c0>, 4248.109644573)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7f15b0cffd30>
+2025-05-06 02:41:03,026 - asyncio - ERROR - Task was destroyed but it is pending!
+task: <Task pending name='Task-5' coro=<WebSocketCommonProtocol.close_connection() running at /home/excalibur/.local/lib/python3.10/site-packages/websockets/legacy/protocol.py:1324> wait_for=<Future pending cb=[Task.task_wakeup()]> cb=[gather.<locals>._done_callback() at /usr/lib/python3.10/asyncio/tasks.py:720]>
+2025-05-06 02:41:37,579 - paradex_app.paradex - INFO - [INFO] Успешно подключен к Paradex WebSocket
+2025-05-06 02:41:37,580 - paradex_data_import - INFO - Подключение к Paradex установлено
+2025-05-06 02:41:37,580 - paradex_app.paradex - INFO - Начинаю загрузку размеров контрактов с API Paradex...
+2025-05-06 02:41:37,580 - paradex_app.paradex - WARNING - JWT токен не предоставлен, запрос может быть ограничен
+2025-05-06 02:41:38,794 - paradex_app.paradex - INFO - Получен ответ от API markets со статусом: 200
+2025-05-06 02:41:39,085 - paradex_app.paradex - WARNING - API не вернул данные о рынках в ответе
+2025-05-06 02:41:39,087 - paradex_app.paradex - INFO - Получен ответ API markets: 0 контрактов
+2025-05-06 02:41:39,088 - paradex_app.paradex - INFO - Установлено стандартное значение для BTC-USD-PERP: 0.001
+2025-05-06 02:41:39,088 - paradex_app.paradex - INFO - Установлено стандартное значение для ETH-USD-PERP: 0.01
+2025-05-06 02:41:39,088 - paradex_app.paradex - INFO - Установлено стандартное значение для SOL-USD-PERP: 0.1
+2025-05-06 02:41:39,088 - paradex_app.paradex - WARNING - Не удалось получить размер контракта для BTC-USD-PERP из API, используется стандартное значение: 0.001
+2025-05-06 02:41:39,088 - paradex_app.paradex - WARNING - Не удалось получить размер контракта для ETH-USD-PERP из API, используется стандартное значение: 0.01
+2025-05-06 02:41:39,088 - paradex_app.paradex - WARNING - Не удалось получить размер контракта для SOL-USD-PERP из API, используется стандартное значение: 0.1
+2025-05-06 02:41:39,088 - paradex_app.paradex - INFO - Итоги загрузки размеров контрактов:
+2025-05-06 02:41:39,088 - paradex_app.paradex - INFO - - Успешно загружено: 0 символов
+2025-05-06 02:41:39,088 - paradex_app.paradex - INFO - - Ошибки загрузки: 0 символов
+2025-05-06 02:41:39,088 - paradex_app.paradex - INFO - - Отсутствуют важные символы: BTC-USD-PERP, ETH-USD-PERP, SOL-USD-PERP
+2025-05-06 02:41:39,088 - paradex_app.paradex - INFO - Итоговый размер контракта для BTC-USD-PERP: 0.001
+2025-05-06 02:41:39,088 - paradex_app.paradex - INFO - Итоговый размер контракта для ETH-USD-PERP: 0.01
+2025-05-06 02:41:39,088 - paradex_app.paradex - INFO - Итоговый размер контракта для SOL-USD-PERP: 0.1
+2025-05-06 02:41:39,089 - paradex_data_import - INFO - Размеры контрактов: {'BTC-USD-PERP': 0.001, 'ETH-USD-PERP': 0.01, 'SOL-USD-PERP': 0.1}
+2025-05-06 02:41:39,089 - paradex_data_import - INFO - Получение данных о рынках Paradex...
+2025-05-06 02:41:39,089 - paradex_app.paradex - WARNING - Нет данных рынков, пытаемся получить резервные данные
+2025-05-06 02:41:39,089 - paradex_app.paradex - INFO - Запрос резервных данных через REST API Paradex...
+2025-05-06 02:41:39,381 - paradex_app.paradex - ERROR - Ошибка при запросе BBO: 401
+2025-05-06 02:41:39,381 - paradex_app.paradex - ERROR - Ошибка аутентификации API (401). Проверьте JWT токен.
+2025-05-06 02:41:39,381 - paradex_data_import - INFO - Получено 2 рынков
+2025-05-06 02:41:39,381 - paradex_data_import - ERROR - Ошибка при работе с Paradex: string indices must be integers
+2025-05-06 02:41:39,382 - paradex_data_import - ERROR - Ошибка при выполнении скрипта: 'Paradex' object has no attribute 'close'
+2025-05-06 02:41:39,382 - asyncio - ERROR - Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fc00bee0100>
+2025-05-06 02:41:39,382 - asyncio - ERROR - Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7fc00bd4b040>, 4290.747151657)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7fc00bd03df0>
+2025-05-06 02:42:58,418 - paradex_app.paradex - INFO - [INFO] Успешно подключен к Paradex WebSocket
+2025-05-06 02:42:58,419 - paradex_data_import - INFO - Подключение к Paradex установлено
+2025-05-06 02:42:58,419 - paradex_app.paradex - INFO - Начинаю загрузку размеров контрактов с API Paradex...
+2025-05-06 02:42:58,419 - paradex_app.paradex - WARNING - JWT токен не предоставлен, запрос может быть ограничен
+2025-05-06 02:42:59,527 - paradex_app.paradex - INFO - Получен ответ от API markets со статусом: 200
+2025-05-06 02:43:00,009 - paradex_app.paradex - WARNING - API не вернул данные о рынках в ответе
+2025-05-06 02:43:00,010 - paradex_app.paradex - INFO - Получен ответ API markets: 0 контрактов
+2025-05-06 02:43:00,011 - paradex_app.paradex - INFO - Установлено стандартное значение для BTC-USD-PERP: 0.001
+2025-05-06 02:43:00,011 - paradex_app.paradex - INFO - Установлено стандартное значение для ETH-USD-PERP: 0.01
+2025-05-06 02:43:00,011 - paradex_app.paradex - INFO - Установлено стандартное значение для SOL-USD-PERP: 0.1
+2025-05-06 02:43:00,011 - paradex_app.paradex - WARNING - Не удалось получить размер контракта для BTC-USD-PERP из API, используется стандартное значение: 0.001
+2025-05-06 02:43:00,011 - paradex_app.paradex - WARNING - Не удалось получить размер контракта для ETH-USD-PERP из API, используется стандартное значение: 0.01
+2025-05-06 02:43:00,011 - paradex_app.paradex - WARNING - Не удалось получить размер контракта для SOL-USD-PERP из API, используется стандартное значение: 0.1
+2025-05-06 02:43:00,011 - paradex_app.paradex - INFO - Итоги загрузки размеров контрактов:
+2025-05-06 02:43:00,011 - paradex_app.paradex - INFO - - Успешно загружено: 0 символов
+2025-05-06 02:43:00,011 - paradex_app.paradex - INFO - - Ошибки загрузки: 0 символов
+2025-05-06 02:43:00,011 - paradex_app.paradex - INFO - - Отсутствуют важные символы: BTC-USD-PERP, ETH-USD-PERP, SOL-USD-PERP
+2025-05-06 02:43:00,011 - paradex_app.paradex - INFO - Итоговый размер контракта для BTC-USD-PERP: 0.001
+2025-05-06 02:43:00,011 - paradex_app.paradex - INFO - Итоговый размер контракта для ETH-USD-PERP: 0.01
+2025-05-06 02:43:00,011 - paradex_app.paradex - INFO - Итоговый размер контракта для SOL-USD-PERP: 0.1
+2025-05-06 02:43:00,012 - paradex_data_import - INFO - Размеры контрактов: {'BTC-USD-PERP': 0.001, 'ETH-USD-PERP': 0.01, 'SOL-USD-PERP': 0.1}
+2025-05-06 02:43:00,012 - paradex_data_import - INFO - Используем стандартный набор символов: ['BTC_USDC_PERP', 'ETH_USDC_PERP', 'SOL_USDC_PERP']
+2025-05-06 02:43:00,012 - paradex_data_import - INFO - Получение данных о рынках Paradex...
+2025-05-06 02:43:00,012 - paradex_data_import - INFO - Обработка символа BTC_USDC_PERP...
+2025-05-06 02:43:00,012 - paradex_data_import - ERROR - Ошибка при обработке BTC_USDC_PERP: 'Paradex' object has no attribute 'get_orderbook'
+2025-05-06 02:43:00,012 - paradex_data_import - INFO - Обработка символа ETH_USDC_PERP...
+2025-05-06 02:43:00,012 - paradex_data_import - ERROR - Ошибка при обработке ETH_USDC_PERP: 'Paradex' object has no attribute 'get_orderbook'
+2025-05-06 02:43:00,012 - paradex_data_import - INFO - Обработка символа SOL_USDC_PERP...
+2025-05-06 02:43:00,012 - paradex_data_import - ERROR - Ошибка при обработке SOL_USDC_PERP: 'Paradex' object has no attribute 'get_orderbook'
+2025-05-06 02:43:00,012 - paradex_data_import - ERROR - Ошибка при выполнении скрипта: 'Paradex' object has no attribute 'close'
+2025-05-06 02:43:00,013 - asyncio - ERROR - Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fa8ba44f340>
+2025-05-06 02:43:00,013 - asyncio - ERROR - Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7fa8ba2d2f20>, 4371.373705904)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7fa8ba2ba020>

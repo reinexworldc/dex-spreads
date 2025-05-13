@@ -1,0 +1,67 @@
+2025-05-06 02:26:26,710 - paradex_contract_test - INFO - ================================================================================
+2025-05-06 02:26:26,710 - paradex_contract_test - INFO - ДИАГНОСТИКА РАЗМЕРОВ КОНТРАКТОВ PARADEX
+2025-05-06 02:26:26,710 - paradex_contract_test - INFO - ================================================================================
+2025-05-06 02:26:26,710 - paradex_contract_test - INFO - Конфигурация успешно загружена
+2025-05-06 02:26:26,710 - paradex_contract_test - INFO - === Проверка загрузки размеров контрактов ===
+2025-05-06 02:26:26,710 - paradex_app.paradex - INFO - Начинаю загрузку размеров контрактов с API Paradex...
+2025-05-06 02:26:26,710 - paradex_app.paradex - WARNING - JWT токен не предоставлен, запрос может быть ограничен
+2025-05-06 02:26:27,909 - paradex_app.paradex - INFO - Получен ответ от API markets со статусом: 200
+2025-05-06 02:26:28,203 - paradex_app.paradex - WARNING - API не вернул данные о рынках в ответе
+2025-05-06 02:26:28,205 - paradex_app.paradex - INFO - Получен ответ API markets: 0 контрактов
+2025-05-06 02:26:28,205 - paradex_app.paradex - INFO - Установлено стандартное значение для BTC-USD-PERP: 0.001
+2025-05-06 02:26:28,205 - paradex_app.paradex - INFO - Установлено стандартное значение для ETH-USD-PERP: 0.01
+2025-05-06 02:26:28,205 - paradex_app.paradex - INFO - Установлено стандартное значение для SOL-USD-PERP: 0.1
+2025-05-06 02:26:28,205 - paradex_app.paradex - WARNING - Не удалось получить размер контракта для BTC-USD-PERP из API, используется стандартное значение: 0.001
+2025-05-06 02:26:28,205 - paradex_app.paradex - WARNING - Не удалось получить размер контракта для ETH-USD-PERP из API, используется стандартное значение: 0.01
+2025-05-06 02:26:28,205 - paradex_app.paradex - WARNING - Не удалось получить размер контракта для SOL-USD-PERP из API, используется стандартное значение: 0.1
+2025-05-06 02:26:28,205 - paradex_app.paradex - INFO - Итоги загрузки размеров контрактов:
+2025-05-06 02:26:28,205 - paradex_app.paradex - INFO - - Успешно загружено: 0 символов
+2025-05-06 02:26:28,205 - paradex_app.paradex - INFO - - Ошибки загрузки: 0 символов
+2025-05-06 02:26:28,205 - paradex_app.paradex - INFO - - Отсутствуют важные символы: BTC-USD-PERP, ETH-USD-PERP, SOL-USD-PERP
+2025-05-06 02:26:28,205 - paradex_app.paradex - INFO - Итоговый размер контракта для BTC-USD-PERP: 0.001
+2025-05-06 02:26:28,206 - paradex_app.paradex - INFO - Итоговый размер контракта для ETH-USD-PERP: 0.01
+2025-05-06 02:26:28,206 - paradex_app.paradex - INFO - Итоговый размер контракта для SOL-USD-PERP: 0.1
+2025-05-06 02:26:28,206 - paradex_contract_test - INFO - Всего загружено 3 размеров контрактов
+2025-05-06 02:26:28,206 - paradex_contract_test - INFO - Контракт BTC-USD-PERP: 0.001
+2025-05-06 02:26:28,206 - paradex_contract_test - INFO - Контракт ETH-USD-PERP: 0.01
+2025-05-06 02:26:28,206 - paradex_contract_test - INFO - Контракт SOL-USD-PERP: 0.1
+2025-05-06 02:26:28,206 - paradex_contract_test - INFO - === Тестирование нормализации цен ===
+2025-05-06 02:26:28,206 - paradex_contract_test - INFO - Тест BTC-USD-PERP:
+2025-05-06 02:26:28,206 - paradex_contract_test - INFO -   Размер контракта: 0.001
+2025-05-06 02:26:28,206 - paradex_contract_test - INFO -   Сырые цены: bid=93.5, ask=94.0
+2025-05-06 02:26:28,207 - paradex_contract_test - INFO -   Нормализованные цены: bid=93500.0, ask=94000.0
+2025-05-06 02:26:28,207 - paradex_contract_test - INFO -   ✅ Результат ВЕРНЫЙ (погрешность: bid=0.00%, ask=0.00%)
+2025-05-06 02:26:28,207 - paradex_contract_test - INFO - Тест ETH-USD-PERP:
+2025-05-06 02:26:28,207 - paradex_contract_test - INFO -   Размер контракта: 0.01
+2025-05-06 02:26:28,207 - paradex_contract_test - INFO -   Сырые цены: bid=18.2, ask=18.4
+2025-05-06 02:26:28,207 - paradex_contract_test - INFO -   Нормализованные цены: bid=1820.0, ask=1839.9999999999998
+2025-05-06 02:26:28,207 - paradex_contract_test - INFO -   ✅ Результат ВЕРНЫЙ (погрешность: bid=0.00%, ask=0.00%)
+2025-05-06 02:26:28,207 - paradex_contract_test - INFO - Тест SOL-USD-PERP:
+2025-05-06 02:26:28,207 - paradex_contract_test - INFO -   Размер контракта: 0.1
+2025-05-06 02:26:28,207 - paradex_contract_test - INFO -   Сырые цены: bid=14.1, ask=14.2
+2025-05-06 02:26:28,207 - paradex_contract_test - INFO -   Нормализованные цены: bid=141.0, ask=141.99999999999997
+2025-05-06 02:26:28,207 - paradex_contract_test - INFO -   ✅ Результат ВЕРНЫЙ (погрешность: bid=0.00%, ask=0.00%)
+2025-05-06 02:26:28,207 - paradex_contract_test - INFO - === Тестирование валидации сырых цен ===
+2025-05-06 02:26:28,207 - paradex_contract_test - INFO - ✅ BTC-USD-PERP с ценой 90: валидация прошла (ожидалось: True)
+2025-05-06 02:26:28,207 - paradex_app.paradex - WARNING - Цена для BTC-USD-PERP (10) вне диапазона [30, 150]
+2025-05-06 02:26:28,207 - paradex_contract_test - INFO - ✅ BTC-USD-PERP с ценой 10: валидация не прошла (ожидалось: False)
+2025-05-06 02:26:28,208 - paradex_app.paradex - WARNING - Цена для BTC-USD-PERP (200) вне диапазона [30, 150]
+2025-05-06 02:26:28,208 - paradex_contract_test - INFO - ✅ BTC-USD-PERP с ценой 200: валидация не прошла (ожидалось: False)
+2025-05-06 02:26:28,208 - paradex_contract_test - INFO - ✅ ETH-USD-PERP с ценой 20: валидация прошла (ожидалось: True)
+2025-05-06 02:26:28,208 - paradex_app.paradex - WARNING - Цена для ETH-USD-PERP (5) вне диапазона [10, 50]
+2025-05-06 02:26:28,208 - paradex_contract_test - INFO - ✅ ETH-USD-PERP с ценой 5: валидация не прошла (ожидалось: False)
+2025-05-06 02:26:28,208 - paradex_app.paradex - WARNING - Цена для ETH-USD-PERP (60) вне диапазона [10, 50]
+2025-05-06 02:26:28,208 - paradex_contract_test - INFO - ✅ ETH-USD-PERP с ценой 60: валидация не прошла (ожидалось: False)
+2025-05-06 02:26:28,208 - paradex_contract_test - INFO - ✅ SOL-USD-PERP с ценой 15: валидация прошла (ожидалось: True)
+2025-05-06 02:26:28,208 - paradex_app.paradex - WARNING - Цена для SOL-USD-PERP (2) вне диапазона [3, 50]
+2025-05-06 02:26:28,208 - paradex_contract_test - INFO - ✅ SOL-USD-PERP с ценой 2: валидация не прошла (ожидалось: False)
+2025-05-06 02:26:28,208 - paradex_app.paradex - WARNING - Цена для SOL-USD-PERP (60) вне диапазона [3, 50]
+2025-05-06 02:26:28,208 - paradex_contract_test - INFO - ✅ SOL-USD-PERP с ценой 60: валидация не прошла (ожидалось: False)
+2025-05-06 02:26:28,208 - paradex_contract_test - INFO - ================================================================================
+2025-05-06 02:26:28,208 - paradex_contract_test - INFO - ТЕСТИРОВАНИЕ ЗАВЕРШЕНО
+2025-05-06 02:26:28,208 - paradex_contract_test - INFO - ================================================================================
+2025-05-06 02:26:28,208 - asyncio - ERROR - Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7f5d4e4bba60>
+2025-05-06 02:26:28,209 - asyncio - ERROR - Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x7f5d4e4e4040>, 3379.567691947)]']
+connector: <aiohttp.connector.TCPConnector object at 0x7f5d4e4bb940>

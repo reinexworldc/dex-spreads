@@ -1,0 +1,6 @@
+2025-05-06 02:46:30,560 - paradex_data_check - INFO - Запуск проверки и обновления данных Paradex
+2025-05-06 02:46:30,560 - paradex_data_check - INFO - Проверка данных с Paradex в базе...
+2025-05-06 02:46:30,561 - paradex_data_check - INFO - Найдено записей для пары paradex_backpack: 12
+2025-05-06 02:46:30,561 - paradex_data_check - INFO - Найдено записей для пары paradex_hyperliquid: 12
+2025-05-06 02:46:30,562 - paradex_data_check - INFO - Найдено записей за последние 24 часа: 24
+2025-05-06 02:46:30,562 - paradex_data_check - INFO - Последние записи с Paradex:

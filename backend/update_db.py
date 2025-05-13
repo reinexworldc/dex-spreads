@@ -1,0 +1,399 @@
+import sqlite3
+import os
+import logging
+
+# Получаем логгер для модуля
+logger = logging.getLogger("paradex_app.db_update")
+
+def update_database_structure():
+    """
+    Обновляет структуру базы данных, добавляя недостающие столбцы для поддержки Drift
+    """
+    logger.info("Проверка и обновление структуры базы данных...")
+    
+    # Подключаемся к базе данных
+    conn = sqlite3.connect('db.sqlite3')
+    cursor = conn.cursor()
+    
+    try:
+        # Проверяем существующие столбцы в таблице spreads
+        cursor.execute("PRAGMA table_info(spreads)")
+        columns = cursor.fetchall()
+        column_names = [column[1] for column in columns]
+        
+        # Добавляем столбец drift_price, если его нет
+        if 'drift_price' not in column_names:
+            logger.info("Добавление столбца drift_price в таблицу spreads...")
+            cursor.execute("ALTER TABLE spreads ADD COLUMN drift_price REAL DEFAULT 0")
+        
+        # Добавляем столбцы exchange1 и exchange2, если их нет
+        if 'exchange1' not in column_names:
+            logger.info("Добавление столбца exchange1 в таблицу spreads...")
+            cursor.execute("ALTER TABLE spreads ADD COLUMN exchange1 TEXT DEFAULT ''")
+        
+        if 'exchange2' not in column_names:
+            logger.info("Добавление столбца exchange2 в таблицу spreads...")
+            cursor.execute("ALTER TABLE spreads ADD COLUMN exchange2 TEXT DEFAULT ''")
+        
+        # Добавляем столбцы для сырых цен Paradex
+        if 'paradex_raw_price' not in column_names:
+            logger.info("Добавление столбца paradex_raw_price в таблицу spreads...")
+            cursor.execute("ALTER TABLE spreads ADD COLUMN paradex_raw_price REAL DEFAULT 0")
+        
+        if 'paradex_raw_bid' not in column_names:
+            logger.info("Добавление столбца paradex_raw_bid в таблицу spreads...")
+            cursor.execute("ALTER TABLE spreads ADD COLUMN paradex_raw_bid REAL DEFAULT 0")
+        
+        if 'paradex_raw_ask' not in column_names:
+            logger.info("Добавление столбца paradex_raw_ask в таблицу spreads...")
+            cursor.execute("ALTER TABLE spreads ADD COLUMN paradex_raw_ask REAL DEFAULT 0")
+        
+        if 'paradex_contract_size' not in column_names:
+            logger.info("Добавление столбца paradex_contract_size в таблицу spreads...")
+            cursor.execute("ALTER TABLE spreads ADD COLUMN paradex_contract_size REAL DEFAULT 1.0")
+        
+        # Подтверждаем изменения
+        conn.commit()
+        logger.info("Структура базы данных успешно обновлена")
+        
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении базы данных: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+
+def update_difference_values():
+    """
+    Заполняет колонку difference на основе существующих данных о ценах,
+    используя логарифмический метод для более точного расчета спредов и
+    статистическую фильтрацию для устранения аномальных значений.
+    """
+    logger.info("Обновление значений разницы цен (логарифмический метод)...")
+    
+    conn = sqlite3.connect('db.sqlite3')
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    try:
+        # Получаем все записи с заполненными ценами и exchange_pair
+        cursor.execute("""
+            SELECT id, symbol, signal, paradex_price, backpack_price, hyperliquid_price, exchange_pair, exchange1, exchange2
+            FROM spreads
+            WHERE exchange_pair IS NOT NULL AND exchange_pair != ''
+        """)
+        
+        rows = cursor.fetchall()
+        logger.info(f"Найдено {len(rows)} записей для обновления")
+        
+        # Группируем данные по символу и паре бирж для статистического анализа
+        grouped_data = {}
+        for row in rows:
+            symbol = row['symbol']
+            exchange_pair = row['exchange_pair']
+            key = f"{symbol}_{exchange_pair}"
+            
+            if key not in grouped_data:
+                grouped_data[key] = []
+                
+            grouped_data[key].append(row)
+        
+        # Количество записей для предварительного анализа
+        stats_sample_size = 200
+        
+        total_updated = 0
+        
+        # Обрабатываем каждую группу отдельно для повышения точности
+        for key, group_rows in grouped_data.items():
+            logger.info(f"Обработка группы: {key}, записей: {len(group_rows)}")
+            
+            # Отбираем последние записи для расчета статистики
+            recent_rows = group_rows[-stats_sample_size:] if len(group_rows) > stats_sample_size else group_rows
+            
+            # Рассчитываем базовые статистические показатели для каждого типа сигнала
+            buy_ratios = []
+            sell_ratios = []
+            
+            for row in recent_rows:
+                exchange_pair = row['exchange_pair']
+                if not exchange_pair or '_' not in exchange_pair:
+                    continue
+                    
+                exchange1, exchange2 = exchange_pair.split('_')
+                price1 = row[f'{exchange1}_price']
+                price2 = row[f'{exchange2}_price']
+                
+                if price1 is None or price2 is None or price1 <= 0 or price2 <= 0:
+                    continue
+                
+                # Используем отношение цен вместо процентной разницы
+                if row['signal'] == 'BUY':
+                    # Для BUY: покупаем на первой бирже, продаем на второй
+                    price_ratio = price2 / price1
+                    buy_ratios.append(price_ratio)
+                else:
+                    # Для SELL: покупаем на второй бирже, продаем на первой
+                    price_ratio = price1 / price2
+                    sell_ratios.append(price_ratio)
+            
+            # Рассчитываем квартили для определения выбросов
+            buy_quartiles = calculate_quartiles(buy_ratios) if buy_ratios else None
+            sell_quartiles = calculate_quartiles(sell_ratios) if sell_ratios else None
+            
+            # Обновляем каждую запись в этой группе
+            updated_in_group = 0
+            
+            for row in group_rows:
+                exchange_pair = row['exchange_pair']
+                if not exchange_pair or '_' not in exchange_pair:
+                    continue
+                    
+                exchange1, exchange2 = exchange_pair.split('_')
+                price1 = row[f'{exchange1}_price']
+                price2 = row[f'{exchange2}_price']
+                
+                if price1 is None or price2 is None or price1 <= 0 or price2 <= 0:
+                    continue
+                
+                # Расчет с проверкой на выбросы
+                if row['signal'] == 'BUY':
+                    price_ratio = price2 / price1
+                    is_outlier = False
+                    
+                    # Проверяем, является ли значение выбросом
+                    if buy_quartiles:
+                        q1, q3, iqr_range = buy_quartiles
+                        lower_bound = q1 - 1.5 * iqr_range
+                        upper_bound = q3 + 1.5 * iqr_range
+                        
+                        if price_ratio < lower_bound or price_ratio > upper_bound:
+                            is_outlier = True
+                    
+                    # Для выбросов используем логарифмический подход
+                    if is_outlier and price_ratio > 1.0:
+                        percent_diff = 100 * (price_ratio - 1) / (1 + abs(price_ratio - 1))
+                    else:
+                        percent_diff = (price_ratio - 1) * 100
+                else:
+                    price_ratio = price1 / price2
+                    is_outlier = False
+                    
+                    # Проверяем, является ли значение выбросом
+                    if sell_quartiles:
+                        q1, q3, iqr_range = sell_quartiles
+                        lower_bound = q1 - 1.5 * iqr_range
+                        upper_bound = q3 + 1.5 * iqr_range
+                        
+                        if price_ratio < lower_bound or price_ratio > upper_bound:
+                            is_outlier = True
+                    
+                    # Для выбросов используем логарифмический подход
+                    if is_outlier and price_ratio > 1.0:
+                        percent_diff = 100 * (price_ratio - 1) / (1 + abs(price_ratio - 1))
+                    else:
+                        percent_diff = (price_ratio - 1) * 100
+                
+                # Обновляем значение разницы
+                cursor.execute("""
+                    UPDATE spreads
+                    SET difference = ?
+                    WHERE id = ?
+                """, (percent_diff, row['id']))
+                
+                updated_in_group += 1
+            
+            total_updated += updated_in_group
+            logger.info(f"Обновлено {updated_in_group} записей в группе {key}")
+        
+        conn.commit()
+        logger.info(f"Всего обновлено {total_updated} записей")
+    
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении значений разницы: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+
+def calculate_quartiles(data):
+    """
+    Рассчитывает квартили для массива данных.
+    Возвращает кортеж (Q1, Q3, IQR)
+    """
+    if not data:
+        return None
+        
+    # Сортируем данные
+    sorted_data = sorted(data)
+    n = len(sorted_data)
+    
+    # Находим позиции для Q1 и Q3
+    q1_pos = n // 4
+    q3_pos = (3 * n) // 4
+    
+    # Рассчитываем Q1 и Q3
+    q1 = sorted_data[q1_pos]
+    q3 = sorted_data[q3_pos]
+    
+    # Межквартильный размах
+    iqr = q3 - q1
+    
+    return (q1, q3, iqr)
+
+def update_db():
+    """Обновляет схему базы данных при необходимости"""
+    logger.info("Проверка и обновление схемы базы данных...")
+    
+    conn = sqlite3.connect('db.sqlite3')
+    cursor = conn.cursor()
+    
+    # Проверяем, есть ли колонка hyperliquid_price в таблице spreads
+    cursor.execute("PRAGMA table_info(spreads)")
+    columns = cursor.fetchall()
+    column_names = [column[1] for column in columns]
+    
+    # Если колонки нет, добавляем ее
+    if 'hyperliquid_price' not in column_names:
+        logger.info("Добавление колонки hyperliquid_price в таблицу spreads...")
+        try:
+            cursor.execute("ALTER TABLE spreads ADD COLUMN hyperliquid_price REAL DEFAULT 0")
+            conn.commit()
+            logger.info("Колонка успешно добавлена")
+        except Exception as e:
+            logger.error(f"Ошибка при добавлении колонки: {e}")
+    else:
+        logger.info("Колонка hyperliquid_price уже существует")
+    
+    # Добавляем поле difference для хранения процентной разницы спреда
+    if 'difference' not in column_names:
+        logger.info("Добавление колонки difference в таблицу spreads...")
+        try:
+            cursor.execute("ALTER TABLE spreads ADD COLUMN difference REAL DEFAULT 0")
+            conn.commit()
+            logger.info("Колонка difference успешно добавлена")
+        except Exception as e:
+            logger.error(f"Ошибка при добавлении колонки difference: {e}")
+    else:
+        logger.info("Колонка difference уже существует")
+    
+    # Добавляем поле exchange_pair для хранения информации о паре бирж
+    if 'exchange_pair' not in column_names:
+        logger.info("Добавление колонки exchange_pair в таблицу spreads...")
+        try:
+            cursor.execute("ALTER TABLE spreads ADD COLUMN exchange_pair TEXT DEFAULT NULL")
+            
+            # Заполняем поле exchange_pair на основе существующих данных
+            logger.info("Заполнение поля exchange_pair для существующих записей...")
+            
+            # Сначала определим каких пар бирж больше всего у нас в данных
+            cursor.execute("""
+                SELECT 
+                    COUNT(*) as count,
+                    CASE 
+                        WHEN backpack_price > 0 AND paradex_price > 0 THEN 'paradex_backpack'
+                        WHEN backpack_price > 0 AND hyperliquid_price > 0 THEN 'backpack_hyperliquid'
+                        WHEN paradex_price > 0 AND hyperliquid_price > 0 THEN 'paradex_hyperliquid'
+                        ELSE NULL
+                    END as pair
+                FROM spreads
+                GROUP BY pair
+                ORDER BY count DESC
+            """)
+            
+            pairs_data = cursor.fetchall()
+            if pairs_data and pairs_data[0][1]:
+                default_pair = pairs_data[0][1]
+                logger.info(f"Пара по умолчанию: {default_pair}")
+                
+                # Обновляем поле exchange_pair для всех записей
+                cursor.execute(f"""
+                    UPDATE spreads
+                    SET exchange_pair = 
+                        CASE 
+                            WHEN backpack_price > 0 AND paradex_price > 0 THEN 'paradex_backpack'
+                            WHEN backpack_price > 0 AND hyperliquid_price > 0 THEN 'backpack_hyperliquid'
+                            WHEN paradex_price > 0 AND hyperliquid_price > 0 THEN 'paradex_hyperliquid'
+                            ELSE '{default_pair}'
+                        END
+                """)
+                
+                conn.commit()
+                logger.info("Поле exchange_pair успешно заполнено")
+            else:
+                logger.info("Недостаточно данных для определения пары по умолчанию")
+        except Exception as e:
+            logger.error(f"Ошибка при добавлении колонки exchange_pair: {e}")
+    else:
+        logger.info("Колонка exchange_pair уже существует")
+    
+    conn.close()
+    
+    # Вызываем обновление структуры базы данных (Drift)
+    update_database_structure()
+    
+    # Вызываем обновление разницы цен
+    # Этот вызов нужен, если у нас есть старые записи без заполненного поля difference
+    # В нашем файле это отдельная функция, поэтому мы ее вызываем только при необходимости
+    # update_difference_values()
+    
+    logger.info("Обновление схемы базы данных завершено")
+
+def update_exchange_fields():
+    """
+    Заполняет поля exchange1 и exchange2 на основе значения exchange_pair
+    """
+    logger.info("Обновление полей exchange1 и exchange2...")
+    
+    conn = sqlite3.connect('db.sqlite3')
+    cursor = conn.cursor()
+    
+    try:
+        # Получаем все записи с заполненным exchange_pair
+        cursor.execute("""
+            SELECT id, exchange_pair, exchange1, exchange2
+            FROM spreads
+            WHERE exchange_pair IS NOT NULL AND exchange_pair != ''
+        """)
+        
+        rows = cursor.fetchall()
+        logger.info(f"Найдено {len(rows)} записей для обновления полей exchange1 и exchange2")
+        
+        updated_count = 0
+        
+        for row in rows:
+            id, exchange_pair, exchange1, exchange2 = row
+            
+            # Если поля exchange1 и exchange2 уже заполнены, пропускаем
+            if exchange1 and exchange2 and exchange1 != '' and exchange2 != '':
+                continue
+                
+            # Разбиваем exchange_pair на exchange1 и exchange2
+            exchanges = exchange_pair.split('_')
+            if len(exchanges) != 2:
+                continue
+                
+            # Обновляем поля exchange1 и exchange2
+            cursor.execute("""
+                UPDATE spreads
+                SET exchange1 = ?, exchange2 = ?
+                WHERE id = ?
+            """, (exchanges[0], exchanges[1], id))
+            
+            updated_count += 1
+        
+        conn.commit()
+        logger.info(f"Обновлено {updated_count} записей")
+    
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении полей exchange1 и exchange2: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+
+if __name__ == "__main__":
+    update_database_structure()
+    logger.info("Проверка структуры базы данных завершена")
+    update_db()
+    # Обновляем поля exchange1 и exchange2
+    update_exchange_fields()
+    # Заполняем значения разницы для существующих записей
+    update_difference_values()
+    logger.info("Все обновления базы данных завершены") 

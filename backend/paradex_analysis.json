@@ -1,0 +1,66 @@
+{
+  "paradex_markets": [],
+  "backpack_markets": [
+    {
+      "symbol": "AAVE_USDC_PERP",
+      "bid": 0.0,
+      "ask": 0.0,
+      "last_update": 1746475756
+    },
+    {
+      "symbol": "ADA_USDC_PERP",
+      "bid": 0.0,
+      "ask": 0.0,
+      "last_update": 1746475756
+    },
+    {
+      "symbol": "ARB_USDC_PERP",
+      "bid": 0.0,
+      "ask": 0.0,
+      "last_update": 1746475756
+    },
+    {
+      "symbol": "AVAX_USDC_PERP",
+      "bid": 0.0,
+      "ask": 0.0,
+      "last_update": 1746475756
+    },
+    {
+      "symbol": "BERA_USDC_PERP",
+      "bid": 0.0,
+      "ask": 0.0,
+      "last_update": 1746475756
+    },
+    {
+      "symbol": "BNB_USDC_PERP",
+      "bid": 0.0,
+      "ask": 0.0,
+      "last_update": 1746475756
+    },
+    {
+      "symbol": "BTC_USDC_PERP",
+      "bid": 0.0,
+      "ask": 0.0,
+      "last_update": 1746475756
+    },
+    {
+      "symbol": "DOGE_USDC_PERP",
+      "bid": 0.0,
+      "ask": 0.0,
+      "last_update": 1746475756
+    },
+    {
+      "symbol": "DOT_USDC_PERP",
+      "bid": 0.0,
+      "ask": 0.0,
+      "last_update": 1746475756
+    },
+    {
+      "symbol": "ENA_USDC_PERP",
+      "bid": 0.0,
+      "ask": 0.0,
+      "last_update": 1746475756
+    }
+  ],
+  "hyperliquid_markets": []
+}

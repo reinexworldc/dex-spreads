@@ -1,0 +1,4 @@
+2025-05-06 03:06:26,074 - paradex_data_importer - INFO - Запуск импорта данных Paradex
+2025-05-06 03:06:26,074 - paradex_data_importer - WARNING - JWT токен не указан. Некоторые запросы могут быть недоступны.
+2025-05-06 03:06:27,287 - paradex_data_importer - ERROR - Ошибка при получении рынков: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
+2025-05-06 03:06:27,287 - paradex_data_importer - ERROR - Не удалось получить данные о рынках, прерываю выполнение
