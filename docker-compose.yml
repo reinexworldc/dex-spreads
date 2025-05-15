@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend/db.sqlite3:/app/db.sqlite3
+    networks:
+      - app-network
+    restart: always
+
+  main:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.main
+    volumes:
+      - ./backend/db.sqlite3:/app/db.sqlite3
+    networks:
+      - app-network
+    depends_on:
+      - backend
+    restart: always
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:5000
+    networks:
+      - app-network
+    depends_on:
+      - backend
+    restart: always
+
+networks:
+  app-network:
+    driver: bridge 
