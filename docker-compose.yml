@@ -27,7 +27,7 @@ services:
       - backend
     restart: always
     command: >
-      bash -c "mkdir -p /app/data && touch /app/data/db.sqlite3 && chmod 666 /app/data/db.sqlite3 && sleep 5 && python main.py"
+      bash -c "mkdir -p /app/data && touch /app/data/db.sqlite3 && chmod 666 /app/data/db.sqlite3 && sleep 5 && cd /app/data && python /app/main.py"
 
   frontend:
     build:
