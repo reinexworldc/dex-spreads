@@ -56,6 +56,9 @@ async def clear_database():
 async def main():
     os.system("cls || clear")
 
+    # Создаем директорию для базы данных, если ее не существует
+    os.makedirs('/app/data', exist_ok=True)
+
     # Обновляем структуру базы данных при необходимости
     update_db()
     update_exchange_fields()
@@ -83,8 +86,6 @@ async def main():
     await backpack.subscribe()
     await paradex.subscribe()
     await hyperliquid.subscribe()
-
-
 
     while True:
         print()

@@ -11,7 +11,7 @@ def create_spreads_table_if_not_exists():
     """
     logger.info("Проверка наличия таблицы spreads...")
     
-    conn = sqlite3.connect('db.sqlite3')
+    conn = sqlite3.connect('/app/data/db.sqlite3')
     cursor = conn.cursor()
     
     try:
@@ -60,7 +60,7 @@ def update_database_structure():
     logger.info("Проверка и обновление структуры базы данных...")
     
     # Подключаемся к базе данных
-    conn = sqlite3.connect('db.sqlite3')
+    conn = sqlite3.connect('/app/data/db.sqlite3')
     cursor = conn.cursor()
     
     try:
@@ -118,7 +118,7 @@ def update_difference_values():
     """
     logger.info("Обновление значений разницы цен (логарифмический метод)...")
     
-    conn = sqlite3.connect('db.sqlite3')
+    conn = sqlite3.connect('/app/data/db.sqlite3')
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
@@ -202,59 +202,49 @@ def update_difference_values():
                 if price1 is None or price2 is None or price1 <= 0 or price2 <= 0:
                     continue
                 
-                # Расчет с проверкой на выбросы
+                # Вычисляем разницу цен
                 if row['signal'] == 'BUY':
+                    # Проверяем на выбросы
                     price_ratio = price2 / price1
-                    is_outlier = False
                     
-                    # Проверяем, является ли значение выбросом
-                    if buy_quartiles:
-                        q1, q3, iqr_range = buy_quartiles
-                        lower_bound = q1 - 1.5 * iqr_range
-                        upper_bound = q3 + 1.5 * iqr_range
+                    # Если у нас есть статистика и коэффициент цены выходит за допустимые пределы
+                    if buy_quartiles and (price_ratio < buy_quartiles['lower_bound'] or price_ratio > buy_quartiles['upper_bound']):
+                        logger.warning(f"Выброс обнаружен: {row['id']}, {row['symbol']}, BUY, ratio={price_ratio:.4f}")
+                        continue
                         
-                        if price_ratio < lower_bound or price_ratio > upper_bound:
-                            is_outlier = True
+                    # Формула для логарифмического спреда
+                    log_spread = 100 * (price2 / price1 - 1)
+                    difference = log_spread
                     
-                    # Для выбросов используем логарифмический подход
-                    if is_outlier and price_ratio > 1.0:
-                        percent_diff = 100 * (price_ratio - 1) / (1 + abs(price_ratio - 1))
-                    else:
-                        percent_diff = (price_ratio - 1) * 100
-                else:
+                else:  # SELL
+                    # Проверяем на выбросы
                     price_ratio = price1 / price2
-                    is_outlier = False
                     
-                    # Проверяем, является ли значение выбросом
-                    if sell_quartiles:
-                        q1, q3, iqr_range = sell_quartiles
-                        lower_bound = q1 - 1.5 * iqr_range
-                        upper_bound = q3 + 1.5 * iqr_range
+                    # Если у нас есть статистика и коэффициент цены выходит за допустимые пределы
+                    if sell_quartiles and (price_ratio < sell_quartiles['lower_bound'] or price_ratio > sell_quartiles['upper_bound']):
+                        logger.warning(f"Выброс обнаружен: {row['id']}, {row['symbol']}, SELL, ratio={price_ratio:.4f}")
+                        continue
                         
-                        if price_ratio < lower_bound or price_ratio > upper_bound:
-                            is_outlier = True
-                    
-                    # Для выбросов используем логарифмический подход
-                    if is_outlier and price_ratio > 1.0:
-                        percent_diff = 100 * (price_ratio - 1) / (1 + abs(price_ratio - 1))
-                    else:
-                        percent_diff = (price_ratio - 1) * 100
+                    # Формула для логарифмического спреда
+                    log_spread = 100 * (price1 / price2 - 1)
+                    difference = log_spread
                 
-                # Обновляем значение разницы
+                # Обновляем запись в базе данных
                 cursor.execute("""
-                    UPDATE spreads
-                    SET difference = ?
+                    UPDATE spreads 
+                    SET difference = ? 
                     WHERE id = ?
-                """, (percent_diff, row['id']))
+                """, (difference, row['id']))
                 
                 updated_in_group += 1
             
+            logger.info(f"Обновлено в группе {key}: {updated_in_group} записей")
             total_updated += updated_in_group
-            logger.info(f"Обновлено {updated_in_group} записей в группе {key}")
-        
+            
+        # Подтверждаем изменения
         conn.commit()
-        logger.info(f"Всего обновлено {total_updated} записей")
-    
+        logger.info(f"Всего обновлено записей: {total_updated}")
+        
     except Exception as e:
         logger.error(f"Ошибка при обновлении значений разницы: {e}")
         conn.rollback()
@@ -263,8 +253,7 @@ def update_difference_values():
 
 def calculate_quartiles(data):
     """
-    Рассчитывает квартили для массива данных.
-    Возвращает кортеж (Q1, Q3, IQR)
+    Рассчитывает квартили для выявления выбросов по IQR методу
     """
     if not data:
         return None
@@ -273,119 +262,50 @@ def calculate_quartiles(data):
     sorted_data = sorted(data)
     n = len(sorted_data)
     
-    # Находим позиции для Q1 и Q3
-    q1_pos = n // 4
-    q3_pos = (3 * n) // 4
+    # Находим квартили
+    q1_idx = int(n * 0.25)
+    q3_idx = int(n * 0.75)
     
-    # Рассчитываем Q1 и Q3
-    q1 = sorted_data[q1_pos]
-    q3 = sorted_data[q3_pos]
+    q1 = sorted_data[q1_idx]
+    q3 = sorted_data[q3_idx]
     
     # Межквартильный размах
     iqr = q3 - q1
     
-    return (q1, q3, iqr)
+    # Границы для выбросов (стандартный множитель 1.5)
+    lower_bound = q1 - 1.5 * iqr
+    upper_bound = q3 + 1.5 * iqr
+    
+    return {
+        "q1": q1,
+        "q3": q3,
+        "iqr": iqr,
+        "lower_bound": lower_bound,
+        "upper_bound": upper_bound
+    }
 
 def update_db():
-    """Обновляет схему базы данных при необходимости"""
-    logger.info("Проверка и обновление схемы базы данных...")
+    """
+    Основная функция обновления базы данных
+    """
+    # Создаем директорию для базы данных, если она не существует
+    os.makedirs(os.path.dirname('/app/data/db.sqlite3'), exist_ok=True)
     
-    # Сначала проверяем наличие таблицы spreads
+    # Настраиваем логирование
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler('paradex_data_importer.log')
+        ]
+    )
+    
+    # Создаем таблицу spreads, если она не существует
     create_spreads_table_if_not_exists()
     
-    conn = sqlite3.connect('db.sqlite3')
-    cursor = conn.cursor()
-    
-    # Проверяем, есть ли колонка hyperliquid_price в таблице spreads
-    cursor.execute("PRAGMA table_info(spreads)")
-    columns = cursor.fetchall()
-    column_names = [column[1] for column in columns]
-    
-    # Если колонки нет, добавляем ее
-    if 'hyperliquid_price' not in column_names:
-        logger.info("Добавление колонки hyperliquid_price в таблицу spreads...")
-        try:
-            cursor.execute("ALTER TABLE spreads ADD COLUMN hyperliquid_price REAL DEFAULT 0")
-            conn.commit()
-            logger.info("Колонка успешно добавлена")
-        except Exception as e:
-            logger.error(f"Ошибка при добавлении колонки: {e}")
-    else:
-        logger.info("Колонка hyperliquid_price уже существует")
-    
-    # Добавляем поле difference для хранения процентной разницы спреда
-    if 'difference' not in column_names:
-        logger.info("Добавление колонки difference в таблицу spreads...")
-        try:
-            cursor.execute("ALTER TABLE spreads ADD COLUMN difference REAL DEFAULT 0")
-            conn.commit()
-            logger.info("Колонка difference успешно добавлена")
-        except Exception as e:
-            logger.error(f"Ошибка при добавлении колонки difference: {e}")
-    else:
-        logger.info("Колонка difference уже существует")
-    
-    # Добавляем поле exchange_pair для хранения информации о паре бирж
-    if 'exchange_pair' not in column_names:
-        logger.info("Добавление колонки exchange_pair в таблицу spreads...")
-        try:
-            cursor.execute("ALTER TABLE spreads ADD COLUMN exchange_pair TEXT DEFAULT NULL")
-            
-            # Заполняем поле exchange_pair на основе существующих данных
-            logger.info("Заполнение поля exchange_pair для существующих записей...")
-            
-            # Сначала определим каких пар бирж больше всего у нас в данных
-            cursor.execute("""
-                SELECT 
-                    COUNT(*) as count,
-                    CASE 
-                        WHEN backpack_price > 0 AND paradex_price > 0 THEN 'paradex_backpack'
-                        WHEN backpack_price > 0 AND hyperliquid_price > 0 THEN 'backpack_hyperliquid'
-                        WHEN paradex_price > 0 AND hyperliquid_price > 0 THEN 'paradex_hyperliquid'
-                        ELSE NULL
-                    END as pair
-                FROM spreads
-                GROUP BY pair
-                ORDER BY count DESC
-            """)
-            
-            pairs_data = cursor.fetchall()
-            if pairs_data and pairs_data[0][1]:
-                default_pair = pairs_data[0][1]
-                logger.info(f"Пара по умолчанию: {default_pair}")
-                
-                # Обновляем поле exchange_pair для всех записей
-                cursor.execute(f"""
-                    UPDATE spreads
-                    SET exchange_pair = 
-                        CASE 
-                            WHEN backpack_price > 0 AND paradex_price > 0 THEN 'paradex_backpack'
-                            WHEN backpack_price > 0 AND hyperliquid_price > 0 THEN 'backpack_hyperliquid'
-                            WHEN paradex_price > 0 AND hyperliquid_price > 0 THEN 'paradex_hyperliquid'
-                            ELSE '{default_pair}'
-                        END
-                """)
-                
-                conn.commit()
-                logger.info("Поле exchange_pair успешно заполнено")
-            else:
-                logger.info("Недостаточно данных для определения пары по умолчанию")
-        except Exception as e:
-            logger.error(f"Ошибка при добавлении колонки exchange_pair: {e}")
-    else:
-        logger.info("Колонка exchange_pair уже существует")
-    
-    conn.close()
-    
-    # Вызываем обновление структуры базы данных (Drift)
+    # Обновляем структуру базы данных
     update_database_structure()
-    
-    # Вызываем обновление разницы цен
-    # Этот вызов нужен, если у нас есть старые записи без заполненного поля difference
-    # В нашем файле это отдельная функция, поэтому мы ее вызываем только при необходимости
-    # update_difference_values()
-    
-    logger.info("Обновление схемы базы данных завершено")
 
 def update_exchange_fields():
     """
@@ -393,7 +313,7 @@ def update_exchange_fields():
     """
     logger.info("Обновление полей exchange1 и exchange2...")
     
-    conn = sqlite3.connect('db.sqlite3')
+    conn = sqlite3.connect('/app/data/db.sqlite3')
     cursor = conn.cursor()
     
     try:

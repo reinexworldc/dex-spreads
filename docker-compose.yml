@@ -8,22 +8,26 @@ services:
     expose:
       - "5000"
     volumes:
-      - ./backend/db.sqlite3:/app/db.sqlite3
+      - ./backend/data:/app/data
     networks:
       - app-network
     restart: always
+    command: >
+      bash -c "mkdir -p /app/data && touch /app/data/db.sqlite3 && python -m flask run --host=0.0.0.0"
 
   main:
     build:
       context: ./backend
       dockerfile: Dockerfile.main
     volumes:
-      - ./backend/db.sqlite3:/app/db.sqlite3
+      - ./backend/data:/app/data
     networks:
       - app-network
     depends_on:
       - backend
     restart: always
+    command: >
+      bash -c "mkdir -p /app/data && sleep 5 && python main.py"
 
   frontend:
     build:

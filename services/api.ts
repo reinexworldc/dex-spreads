@@ -2,8 +2,25 @@
  * Базовый API-клиент для взаимодействия с бэкендом
  */
 
+// Объявляем глобальный тип для Window
+declare global {
+  interface Window {
+    ENV_CONFIG?: {
+      API_URL: string;
+    };
+  }
+}
+
+// Функция для получения базового URL API
+function getApiBaseUrl() {
+  if (typeof window !== 'undefined' && window.ENV_CONFIG && window.ENV_CONFIG.API_URL) {
+    return window.ENV_CONFIG.API_URL;
+  }
+  return process.env.NEXT_PUBLIC_API_URL || '/api';
+}
+
 // Базовый URL для API запросов
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const API_BASE_URL = getApiBaseUrl();
 
 /**
  * Интерфейс для данных о спреде

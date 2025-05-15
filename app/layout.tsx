@@ -3,6 +3,7 @@ import "@/app/globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { MainNav } from "@/components/main-nav"
 import type { Metadata } from "next"
+import Script from "next/script"
 
 export const metadata: Metadata = {
   title: "DEX Spread Monitor",
@@ -17,6 +18,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ru" suppressHydrationWarning>
+      <head>
+        <Script src="/env-config.js" strategy="beforeInteractive" />
+      </head>
       <body>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <div className="flex min-h-screen flex-col">
