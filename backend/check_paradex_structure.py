@@ -179,7 +179,7 @@ def fix_exchange_pairs():
     return pb_updated + ph_updated
 
 def add_missing_data():
-    if not os.path.exists('db.sqlite3'):
+    if not os.path.exists('/app/data/db.sqlite3'):
         print(f"База данных не найдена. Создаю новую...")
         create_database()
     
