@@ -13,8 +13,8 @@ logging.basicConfig(
 logger = logging.getLogger("paradex_data_check")
 
 def check_paradex_data():
-    """Проверяет наличие данных с Paradex в базе данных"""
-    conn = sqlite3.connect('db.sqlite3')
+    """Проверяет данные Paradex в базе данных"""
+    conn = sqlite3.connect('/app/data/db.sqlite3')
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
@@ -81,7 +81,7 @@ def check_paradex_data():
 
 def add_test_data():
     """Добавляет тестовые данные для пар с Paradex"""
-    conn = sqlite3.connect('db.sqlite3')
+    conn = sqlite3.connect('/app/data/db.sqlite3')
     cursor = conn.cursor()
     
     # Получаем доступные символы
@@ -159,6 +159,72 @@ def add_test_data():
     
     conn.commit()
     logger.info("Тестовые данные успешно добавлены")
+    conn.close()
+
+def add_paradex_contract_sizes():
+    """Заполняет размеры контрактов Paradex в базе данных"""
+    conn = sqlite3.connect('/app/data/db.sqlite3')
+    cursor = conn.cursor()
+    
+    # Получаем доступные символы
+    cursor.execute("SELECT DISTINCT symbol FROM spreads")
+    symbols = [row[0] for row in cursor.fetchall()]
+    
+    if not symbols:
+        symbols = ['BTC_USDC_PERP', 'ETH_USDC_PERP', 'SOL_USDC_PERP']
+    
+    current_time = int(time.time())
+    
+    # Добавляем размеры контрактов для paradex_backpack
+    logger.info("Добавление размеров контрактов для пары paradex_backpack...")
+    
+    for symbol in symbols[:3]:  # Берем первые 3 символа
+        # Создаем запись для сигнала BUY
+        paradex_price = 100.0
+        backpack_price = 101.0
+        difference = ((backpack_price / paradex_price) - 1) * 100  # Процентная разница
+        
+        cursor.execute("""
+            UPDATE spreads SET paradex_contract_size = ?
+            WHERE symbol = ? AND signal = 'BUY' AND exchange_pair = 'paradex_backpack'
+        """, (0.001, symbol))
+        
+        # Создаем запись для сигнала SELL
+        paradex_price = 102.0
+        backpack_price = 101.0
+        difference = ((paradex_price / backpack_price) - 1) * 100  # Процентная разница
+        
+        cursor.execute("""
+            UPDATE spreads SET paradex_contract_size = ?
+            WHERE symbol = ? AND signal = 'SELL' AND exchange_pair = 'paradex_backpack'
+        """, (0.001, symbol))
+    
+    # Добавляем размеры контрактов для paradex_hyperliquid
+    logger.info("Добавление размеров контрактов для пары paradex_hyperliquid...")
+    
+    for symbol in symbols[:3]:  # Берем первые 3 символа
+        # Создаем запись для сигнала BUY
+        paradex_price = 100.0
+        hyperliquid_price = 100.5
+        difference = ((hyperliquid_price / paradex_price) - 1) * 100  # Процентная разница
+        
+        cursor.execute("""
+            UPDATE spreads SET paradex_contract_size = ?
+            WHERE symbol = ? AND signal = 'BUY' AND exchange_pair = 'paradex_hyperliquid'
+        """, (0.001, symbol))
+        
+        # Создаем запись для сигнала SELL
+        paradex_price = 101.0
+        hyperliquid_price = 100.5
+        difference = ((paradex_price / hyperliquid_price) - 1) * 100  # Процентная разница
+        
+        cursor.execute("""
+            UPDATE spreads SET paradex_contract_size = ?
+            WHERE symbol = ? AND signal = 'SELL' AND exchange_pair = 'paradex_hyperliquid'
+        """, (0.001, symbol))
+    
+    conn.commit()
+    logger.info("Размеры контрактов успешно добавлены")
     conn.close()
 
 if __name__ == "__main__":

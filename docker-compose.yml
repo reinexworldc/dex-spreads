@@ -13,7 +13,7 @@ services:
       - app-network
     restart: always
     command: >
-      bash -c "mkdir -p /app/data && touch /app/data/db.sqlite3 && python -m flask run --host=0.0.0.0"
+      bash -c "mkdir -p /app/data && touch /app/data/db.sqlite3 && chmod 666 /app/data/db.sqlite3 && python -m flask run --host=0.0.0.0"
 
   main:
     build:
@@ -27,7 +27,7 @@ services:
       - backend
     restart: always
     command: >
-      bash -c "mkdir -p /app/data && sleep 5 && python main.py"
+      bash -c "mkdir -p /app/data && ls -la /app/data && touch /app/data/db.sqlite3 && chmod 666 /app/data/db.sqlite3 && sleep 5 && python -m pdb main.py"
 
   frontend:
     build:
