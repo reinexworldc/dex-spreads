@@ -4,6 +4,7 @@ import threading
 import time
 import websockets
 import logging
+import ssl
 from typing import List, Dict, Tuple, Any, Optional
 
 from py.trader import get_general_symbol
@@ -64,7 +65,18 @@ class Hyperliquid:
             return
             
         try:
-            self.ws = await websockets.connect(self.ws_url)
+            # Создаем SSL-контекст с отключенной проверкой сертификата
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            
+            # Подключаемся с отключенной проверкой SSL
+            self.ws = await websockets.connect(
+                self.ws_url,
+                ssl=ssl_context,
+                ping_interval=20,
+                ping_timeout=10
+            )
             self._ws_connected = True
             logger.info("Успешно подключен к Hyperliquid WebSocket")
             
@@ -213,7 +225,12 @@ class Hyperliquid:
         try:
             api_url = "https://api.hyperliquid-testnet.xyz/info" if self.testnet else "https://api.hyperliquid.xyz/info"
             
-            async with aiohttp.ClientSession() as session:
+            # Создаем SSL-контекст с отключенной проверкой сертификата
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            
+            async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:
                 async with session.post(api_url, json={"type": "meta"}) as response:
                     if response.status != 200:
                         raise ValueError(f"Ошибка API: {response.status}")

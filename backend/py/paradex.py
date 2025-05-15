@@ -573,31 +573,6 @@ class Paradex:
                     # Это опцион (Call или Put)
                     is_option = True
             
-            # Базовый актив для проверки реалистичности цен (только для неопционных инструментов)
-            if not is_option:
-                base_asset = symbol.split('-')[0] if '-' in symbol else symbol.split('_')[0]
-                
-                # Проверяем реалистичность цен для известных активов и не-опционных контрактов
-                price_checks = {
-                    "BTC": (80000, 100000),  # BTC ~$90000
-                    "ETH": (1500, 3000),     # ETH ~$2000
-                    "SOL": (100, 300),       # SOL ~$200
-                    "AVAX": (10, 50),        # AVAX ~$30
-                    "SUI": (0.5, 3),         # SUI ~$1-2
-                    "BNB": (400, 650),       # BNB ~$500
-                    "DOGE": (0.08, 0.2),     # DOGE ~$0.1
-                    "JTO": (0.5, 5),         # JTO ~$1-3
-                }
-                
-                # Проверяем, находится ли цена в разумном диапазоне для известных активов
-                if base_asset in price_checks and '-PERP' in symbol:
-                    min_price, max_price = price_checks[base_asset]
-                    
-                    # Если цены не попадают в диапазон, логируем это
-                    if not (min_price <= ask_price <= max_price) or not (min_price <= bid_price <= max_price):
-                        logger.warning(f"Нереалистичные цены для {symbol}: ask={ask_price}, bid={bid_price}, ожидаемый диапазон: {min_price}-{max_price}")
-                        # Но не выходим, чтобы не блокировать данные
-            
             # Сохраняем данные без нормализации - Paradex уже дает реальные цены активов
             if symbol not in self._markets_data:
                 self._markets_data[symbol] = {}
