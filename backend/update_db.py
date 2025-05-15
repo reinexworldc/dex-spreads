@@ -5,6 +5,54 @@ import logging
 # Получаем логгер для модуля
 logger = logging.getLogger("paradex_app.db_update")
 
+def create_spreads_table_if_not_exists():
+    """
+    Создает таблицу spreads, если она не существует
+    """
+    logger.info("Проверка наличия таблицы spreads...")
+    
+    conn = sqlite3.connect('db.sqlite3')
+    cursor = conn.cursor()
+    
+    try:
+        # Проверяем, существует ли таблица spreads
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='spreads'")
+        if not cursor.fetchone():
+            logger.info("Таблица spreads не найдена. Создаем...")
+            
+            # Создаем таблицу spreads
+            cursor.execute("""
+                CREATE TABLE spreads (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    symbol TEXT,
+                    signal TEXT,
+                    backpack_price REAL,
+                    paradex_price REAL,
+                    hyperliquid_price REAL DEFAULT 0,
+                    created INTEGER,
+                    exchange_pair TEXT,
+                    exchange1 TEXT,
+                    exchange2 TEXT,
+                    difference REAL DEFAULT 0,
+                    paradex_raw_price REAL DEFAULT 0,
+                    paradex_raw_bid REAL DEFAULT 0,
+                    paradex_raw_ask REAL DEFAULT 0,
+                    paradex_contract_size REAL DEFAULT 1.0,
+                    drift_price REAL DEFAULT 0
+                )
+            """)
+            
+            conn.commit()
+            logger.info("Таблица spreads успешно создана")
+        else:
+            logger.info("Таблица spreads уже существует")
+    
+    except Exception as e:
+        logger.error(f"Ошибка при создании таблицы spreads: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+
 def update_database_structure():
     """
     Обновляет структуру базы данных, добавляя недостающие столбцы для поддержки Drift
@@ -241,6 +289,9 @@ def calculate_quartiles(data):
 def update_db():
     """Обновляет схему базы данных при необходимости"""
     logger.info("Проверка и обновление схемы базы данных...")
+    
+    # Сначала проверяем наличие таблицы spreads
+    create_spreads_table_if_not_exists()
     
     conn = sqlite3.connect('db.sqlite3')
     cursor = conn.cursor()

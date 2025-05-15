@@ -4,6 +4,7 @@ import websockets
 import threading
 import time
 import logging
+import ssl
 
 from py.trader import get_general_symbol
 
@@ -30,20 +31,43 @@ class Backpack:
                 "last_update": 0
             }
 
+    def is_websocket_connected(self):
+        """Безопасно проверяет, подключен ли веб-сокет"""
+        if self.websocket is None:
+            return False
+            
+        try:
+            # Проверяем состояние соединения с помощью состояния ws.open
+            return self.websocket.open
+        except AttributeError:
+            # Если атрибут open не доступен, пробуем closed
+            try:
+                return not self.websocket.closed
+            except AttributeError:
+                # Если ни один атрибут не доступен, считаем соединение разорванным
+                return False
+
     async def connect(self):
         """Устанавливает WebSocket соединение с Backpack Exchange"""
-        if self.websocket is not None and not self.websocket.closed:
+        if self.is_websocket_connected():
             self.is_connected = True
             return
 
         try:
             uri = "wss://ws.backpack.exchange/"
+            
+            # Создаем SSL-контекст с отключенной проверкой сертификата
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            
             # Настраиваем WebSocket с опциями для автоматического pong и ping_timeout
             self.websocket = await websockets.connect(
                 uri,
                 ping_interval=20,  # Отправляем ping каждые 20 секунд
                 ping_timeout=10,   # Ждем pong не более 10 секунд
-                close_timeout=5    # Ждем закрытия соединения не более 5 секунд
+                close_timeout=5,   # Ждем закрытия соединения не более 5 секунд
+                ssl=ssl_context    # Устанавливаем SSL-контекст без проверки сертификата
             )
             self.is_connected = True
             logger.info("Успешно подключен к Backpack WebSocket")
@@ -86,7 +110,7 @@ class Backpack:
         while True:  # Бесконечный цикл для поддержания соединения
             try:
                 # Проверяем соединение и переподключаемся при необходимости
-                if self.websocket is None or self.websocket.closed:
+                if not self.is_websocket_connected():
                     logger.info("WebSocket соединение закрыто или отсутствует, переподключение...")
                     try:
                         await self.connect()
