@@ -21,13 +21,15 @@ services:
       dockerfile: Dockerfile.main
     volumes:
       - ./backend/data:/app/data
+      - ./backend/config.json:/app/config.json
+      - ./backend/db.sqlite3:/app/db.sqlite3
     networks:
       - app-network
     depends_on:
       - backend
     restart: always
     command: >
-      bash -c "mkdir -p /app/data && touch /app/data/db.sqlite3 && chmod 666 /app/data/db.sqlite3 && sleep 5 && cd /app/data && python /app/main.py"
+      bash -c "mkdir -p /app/data && touch /app/data/db.sqlite3 && chmod 666 /app/data/db.sqlite3 && chmod 666 /app/db.sqlite3 && sleep 5 && python /app/main.py"
 
   frontend:
     build:
