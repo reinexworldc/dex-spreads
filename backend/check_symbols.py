@@ -13,7 +13,7 @@ logger = logging.getLogger("paradex_symbols_check")
 
 def check_paradex_symbols():
     """Проверяет по каким символам есть данные Paradex"""
-    conn = sqlite3.connect('db.sqlite3')
+    conn = sqlite3.connect('/app/data/db.sqlite3')
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
@@ -81,6 +81,11 @@ def check_paradex_symbols():
                       f"Создано: {created_time}")
     
     conn.close()
+
+def get_all_symbols():
+    """Получает список всех уникальных символов из таблицы spreads"""
+    conn = sqlite3.connect('/app/data/db.sqlite3')
+    cursor = conn.cursor()
 
 if __name__ == "__main__":
     check_paradex_symbols() 

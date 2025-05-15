@@ -2,6 +2,7 @@
 import sqlite3
 import time
 import logging
+import os
 
 # Настройка логирования
 logging.basicConfig(
@@ -11,9 +12,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger("paradex_structure_check")
 
+def check_database_connection():
+    try:
+        conn = sqlite3.connect('/app/data/db.sqlite3')
+        conn.close()
+        return True
+    except:
+        return False
+
 def check_database_structure():
     """Проверяет структуру данных Paradex в базе данных"""
-    conn = sqlite3.connect('db.sqlite3')
+    conn = sqlite3.connect('/app/data/db.sqlite3')
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
@@ -115,7 +124,7 @@ def check_database_structure():
 
 def fix_exchange_pairs():
     """Обновляет поля exchange_pair, exchange1, exchange2 для записей с Paradex"""
-    conn = sqlite3.connect('db.sqlite3')
+    conn = sqlite3.connect('/app/data/db.sqlite3')
     cursor = conn.cursor()
     
     logger.info("Исправление полей exchange_pair, exchange1, exchange2 для записей с Paradex...")
@@ -168,6 +177,14 @@ def fix_exchange_pairs():
     conn.close()
     
     return pb_updated + ph_updated
+
+def add_missing_data():
+    if not os.path.exists('db.sqlite3'):
+        print(f"База данных не найдена. Создаю новую...")
+        create_database()
+    
+    conn = sqlite3.connect('/app/data/db.sqlite3')
+    cursor = conn.cursor()
 
 if __name__ == "__main__":
     # Сначала проверяем структуру
