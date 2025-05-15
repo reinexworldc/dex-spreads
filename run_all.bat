@@ -2,7 +2,7 @@
 echo Запуск DEX-Spreads приложения (фронтенд и бэкенд)...
 
 REM Создаем и запускаем бэкенд в отдельном окне
-start cmd /k "cd backend && (if not exist venv\ (echo Создаем виртуальное окружение и устанавливаем зависимости... && python -m venv venv && call venv\Scripts\activate && pip install -r requirements.txt) else (echo Активируем виртуальное окружение... && call venv\Scripts\activate)) && set FLASK_APP=app.py && set FLASK_ENV=development && set FLASK_DEBUG=1 && echo Запускаем Flask-сервер на http://localhost:5000 && flask run --host=0.0.0.0 --port=5000"
+start cmd /k "cd backend && (if not exist venv\ (echo Создаем виртуальное окружение и устанавливаем зависимости... && python -m venv venv && call venv\Scripts\activate && pip install -r requirements.txt) else (echo Активируем виртуальное окружение... && call venv\Scripts\activate && pip install -r requirements.txt)) && echo Запускаем main.py... && python main.py"
 
 REM Запускаем фронтенд в отдельном окне
 start cmd /k "echo Запуск фронтенда... && (if not exist node_modules\ (echo Устанавливаем зависимости... && npm install)) && echo Запускаем Next.js на http://localhost:3000 && npm run dev"
