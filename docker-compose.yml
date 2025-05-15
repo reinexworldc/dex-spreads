@@ -38,6 +38,8 @@ services:
     depends_on:
       - backend
     restart: always
+    extra_hosts:
+      - "localhost:127.0.0.1"
 
   nginx:
     build:
