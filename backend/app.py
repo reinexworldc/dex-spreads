@@ -12,7 +12,16 @@ logger = logging.getLogger("paradex_app.web")
 
 app = Flask(__name__)
 # Настраиваем CORS для всех источников, чтобы React-приложение могло делать запросы
-CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+# Более детальная настройка CORS для лучшей безопасности и производительности
+CORS(app, resources={
+    r"/*": {
+        "origins": ["http://localhost:3000", "http://localhost", "http://77.110.105.98"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "Accept"],
+        "supports_credentials": True,
+        "max_age": 3600  # Кеширование CORS preflight запросов на 1 час
+    }
+})
 
 # Доступные пары бирж
 EXCHANGE_PAIRS = [
@@ -39,6 +48,14 @@ def get_db_connection():
         db_path = os.path.join(db_dir, 'db.sqlite3')
     
     conn = sqlite3.connect(db_path)
+    
+    # Оптимизация SQLite для улучшения производительности
+    conn.execute("PRAGMA journal_mode = WAL")  # Использование WAL режима журнала
+    conn.execute("PRAGMA synchronous = NORMAL")  # Меньше синхронизаций с диском
+    conn.execute("PRAGMA cache_size = 10000")  # Увеличиваем размер кеша
+    conn.execute("PRAGMA temp_store = MEMORY")  # Временные таблицы в памяти
+    conn.execute("PRAGMA mmap_size = 30000000000")  # Используем memory-mapped I/O
+    
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -225,6 +242,7 @@ def largest_spreads_api():
                 (backpack_price != 0 AND hyperliquid_price != 0) OR
                 (paradex_price != 0 AND hyperliquid_price != 0)
             )
+            LIMIT 5000
         '''
         
         rows = conn.execute(query, (time_threshold,)).fetchall()
@@ -401,6 +419,9 @@ def get_data():
     # Добавляем сортировку
     query += f' ORDER BY {sort_by} {sort_order}'
     
+    # Добавляем ограничение на количество записей
+    query += ' LIMIT 1000'
+    
     # Логирование итогового SQL-запроса
     logger.debug(f"SQL-запрос: {query}, параметры: {params}")
     
@@ -572,6 +593,9 @@ def get_mirror_data():
 
     query += f' ORDER BY {sort_by} {sort_order}'
     
+    # Добавляем ограничение на количество записей
+    query += ' LIMIT 1000'
+    
     # Логирование SQL-запроса
     logger.debug(f"Зеркальный SQL-запрос: {query}, параметры: {params}")
     
@@ -661,6 +685,7 @@ def get_summary():
             FROM spreads
             WHERE created >= ? AND exchange_pair IS NOT NULL
             ORDER BY created DESC
+            LIMIT 5000
         '''
     else:
         # Старый вариант - генерируем стандартные пары
@@ -814,6 +839,12 @@ def calculate_statistics(data):
     if not data:
         return None, None, None, None, None
     
+    # Ограничиваем размер данных для статистики
+    MAX_STATS_RECORDS = 5000
+    if len(data) > MAX_STATS_RECORDS:
+        # Берем только последние записи, они обычно более важны
+        data = data[-MAX_STATS_RECORDS:]
+        
     # Сортируем данные
     sorted_data = sorted(data)
     n = len(sorted_data)

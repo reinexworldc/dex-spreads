@@ -1,6 +1,7 @@
 import sqlite3
 import os
 import logging
+import time
 
 # Получаем логгер для модуля
 logger = logging.getLogger("paradex_app.db_update")
@@ -360,6 +361,43 @@ def calculate_quartiles(data):
         "upper_bound": upper_bound
     }
 
+def create_indexes():
+    """
+    Создает индексы для оптимизации запросов
+    """
+    logger.info("Создание индексов для оптимизации запросов...")
+    
+    db_path = get_db_path()
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    try:
+        # Индекс для быстрого поиска по символу
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_symbol ON spreads (symbol)")
+        
+        # Индекс для быстрого поиска по времени создания
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_created ON spreads (created)")
+        
+        # Индекс для быстрого поиска по паре бирж
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_exchange_pair ON spreads (exchange_pair)")
+        
+        # Индекс для быстрого поиска по сигналу
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_signal ON spreads (signal)")
+        
+        # Составной индекс для частых запросов
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_symbol_exchange_pair ON spreads (symbol, exchange_pair)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_symbol_created ON spreads (symbol, created)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_symbol_exchange_pair_created ON spreads (symbol, exchange_pair, created)")
+        
+        conn.commit()
+        logger.info("Индексы успешно созданы")
+    
+    except Exception as e:
+        logger.error(f"Ошибка при создании индексов: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+
 def update_db():
     """
     Основная функция обновления базы данных
@@ -386,6 +424,9 @@ def update_db():
     
     # Обновляем структуру базы данных
     update_database_structure()
+    
+    # Создаем индексы для оптимизации запросов
+    create_indexes()
 
 def update_exchange_fields():
     """
@@ -440,12 +481,65 @@ def update_exchange_fields():
     finally:
         conn.close()
 
+def cleanup_old_data(retention_days=30):
+    """
+    Удаляет старые данные из базы данных для оптимизации размера и производительности
+    
+    :param retention_days: Количество дней, за которые сохраняются данные
+    """
+    logger.info(f"Очистка старых данных (старше {retention_days} дней)...")
+    
+    # Рассчитываем временную метку для удаления данных
+    retention_seconds = retention_days * 24 * 60 * 60
+    cutoff_timestamp = int(time.time()) - retention_seconds
+    
+    db_path = get_db_path()
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    try:
+        # Получаем количество записей до удаления
+        cursor.execute("SELECT COUNT(*) FROM spreads")
+        total_records_before = cursor.fetchone()[0]
+        logger.info(f"Всего записей в базе данных: {total_records_before}")
+        
+        # Удаляем старые записи
+        cursor.execute("DELETE FROM spreads WHERE created < ?", (cutoff_timestamp,))
+        deleted_count = cursor.rowcount
+        
+        # Выполняем VACUUM для освобождения места на диске
+        conn.execute("VACUUM")
+        
+        conn.commit()
+        
+        # Получаем количество записей после удаления
+        cursor.execute("SELECT COUNT(*) FROM spreads")
+        total_records_after = cursor.fetchone()[0]
+        
+        logger.info(f"Удалено {deleted_count} устаревших записей")
+        logger.info(f"Осталось записей в базе данных: {total_records_after}")
+        
+        # Если было удалено много записей, перестраиваем индексы
+        if deleted_count > 1000:
+            logger.info("Перестраиваем индексы для оптимизации производительности...")
+            conn.execute("ANALYZE")
+    
+    except Exception as e:
+        logger.error(f"Ошибка при очистке старых данных: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+
 if __name__ == "__main__":
     update_database_structure()
     logger.info("Проверка структуры базы данных завершена")
     update_db()
+    # Создаем индексы для оптимизации запросов
+    create_indexes()
     # Обновляем поля exchange1 и exchange2
     update_exchange_fields()
     # Заполняем значения разницы для существующих записей
     update_difference_values()
+    # Очищаем старые данные (оставляем данные только за последние 30 дней)
+    cleanup_old_data(30)
     logger.info("Все обновления базы данных завершены") 

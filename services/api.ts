@@ -19,6 +19,10 @@ function getApiBaseUrl() {
   
   // Используем полный URL с портом для доступа к Flask-серверу
   if (typeof window !== 'undefined') {
+    // В продакшене используем относительный путь к API через Nginx
+    if (window.location.hostname !== 'localhost') {
+      return '/api';
+    }
     // Локальная разработка - указываем явно адрес Flask
     return 'http://localhost:5000';
   }
