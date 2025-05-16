@@ -234,8 +234,8 @@ def update_difference_values():
                     # Проверяем на выбросы
                     price_ratio = price2 / price1
                     
-                    # Порог для "микроспредов" - если разница меньше 0.1%, считаем такие спреды валидными без проверки
-                    is_micro_spread = abs(price_ratio - 1.0) < 0.001
+                    # Порог для "микроспредов" - если разница меньше 0.8%, считаем такие спреды валидными без проверки
+                    is_micro_spread = abs(price_ratio - 1.0) < 0.008
                     
                     # Если это не микроспред, проверяем на выбросы
                     if not is_micro_spread and buy_quartiles and (price_ratio < buy_quartiles['lower_bound'] or price_ratio > buy_quartiles['upper_bound']):
@@ -259,7 +259,7 @@ def update_difference_values():
                     price_ratio = price1 / price2
                     
                     # Порог для "микроспредов"
-                    is_micro_spread = abs(price_ratio - 1.0) < 0.001
+                    is_micro_spread = abs(price_ratio - 1.0) < 0.008
                     
                     # Если это не микроспред, проверяем на выбросы
                     if not is_micro_spread and sell_quartiles and (price_ratio < sell_quartiles['lower_bound'] or price_ratio > sell_quartiles['upper_bound']):
@@ -338,16 +338,16 @@ def calculate_quartiles(data):
     iqr = q3 - q1
     
     # Устанавливаем минимальный порог для IQR, чтобы избежать ложных выбросов при малых колебаниях
-    # Для спредов разумно установить минимальный порог в 0.5%
-    MIN_IQR_THRESHOLD = 0.005
+    # Увеличиваем порог с 0.005 до 0.02 (с 0.5% до 2%)
+    MIN_IQR_THRESHOLD = 0.02
     
     # Если IQR слишком мал, увеличиваем его до минимального порога
     if iqr < MIN_IQR_THRESHOLD:
         iqr = MIN_IQR_THRESHOLD
     
-    # Увеличиваем множитель для границ выбросов с 1.5 до 3.0 для более консервативного подхода
+    # Увеличиваем множитель для границ выбросов с 3.0 до 5.0 для более консервативного подхода
     # Это позволит считать выбросами только действительно значительные отклонения
-    iqr_multiplier = 3.0
+    iqr_multiplier = 5.0
     
     # Границы для выбросов с увеличенным множителем
     lower_bound = q1 - iqr_multiplier * iqr
