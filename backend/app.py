@@ -80,24 +80,8 @@ def init_db():
 
 @app.route('/')
 def index():
-    conn = get_db_connection()
-    symbols = conn.execute('SELECT DISTINCT symbol FROM spreads').fetchall()
-    
-    # Всегда используем предопределенные пары бирж, чтобы Paradex был доступен для выбора
-    available_pairs = [f"{pair[0]}_{pair[1]}" for pair in EXCHANGE_PAIRS]
-    
-    # Форматируем названия пар для отображения
-    formatted_pairs = []
-    for pair in available_pairs:
-        if "_" in pair:
-            ex1, ex2 = pair.split("_")
-            formatted_pairs.append({
-                'id': pair,
-                'name': f"{EXCHANGE_NAMES.get(ex1, ex1)} - {EXCHANGE_NAMES.get(ex2, ex2)}"
-            })
-    
-    conn.close()
-    return render_template('index.html', symbols=symbols, exchange_pairs=formatted_pairs)
+    # Перенаправляем на страницу largest_spreads
+    return largest_spreads()
 
 
 @app.route('/largest_spreads')

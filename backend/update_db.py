@@ -132,8 +132,7 @@ def update_database_structure():
 def update_difference_values():
     """
     Заполняет колонку difference на основе существующих данных о ценах,
-    используя логарифмический метод для более точного расчета спредов и
-    статистическую фильтрацию для устранения аномальных значений.
+    используя логарифмический метод для более точного расчета спредов.
     """
     logger.info("Обновление значений разницы цен (логарифмический метод)...")
     
@@ -153,7 +152,7 @@ def update_difference_values():
         rows = cursor.fetchall()
         logger.info(f"Найдено {len(rows)} записей для обновления")
         
-        # Группируем данные по символу и паре бирж для статистического анализа
+        # Группируем данные по символу и паре бирж
         grouped_data = {}
         for row in rows:
             symbol = row['symbol']
@@ -165,55 +164,13 @@ def update_difference_values():
                 
             grouped_data[key].append(row)
         
-        # Количество записей для предварительного анализа
-        stats_sample_size = 200
-        
         total_updated = 0
-        total_checked = 0
-        total_skipped_outliers = 0
-        total_skipped_small = 0
         
-        # Обрабатываем каждую группу отдельно для повышения точности
+        # Обрабатываем каждую группу отдельно
         for key, group_rows in grouped_data.items():
             logger.info(f"Обработка группы: {key}, записей: {len(group_rows)}")
             
-            # Отбираем последние записи для расчета статистики
-            recent_rows = group_rows[-stats_sample_size:] if len(group_rows) > stats_sample_size else group_rows
-            
-            # Рассчитываем базовые статистические показатели для каждого типа сигнала
-            buy_ratios = []
-            sell_ratios = []
-            
-            for row in recent_rows:
-                exchange_pair = row['exchange_pair']
-                if not exchange_pair or '_' not in exchange_pair:
-                    continue
-                    
-                exchange1, exchange2 = exchange_pair.split('_')
-                price1 = row[f'{exchange1}_price']
-                price2 = row[f'{exchange2}_price']
-                
-                if price1 is None or price2 is None or price1 <= 0 or price2 <= 0:
-                    continue
-                
-                # Используем отношение цен вместо процентной разницы
-                if row['signal'] == 'BUY':
-                    # Для BUY: покупаем на первой бирже, продаем на второй
-                    price_ratio = price2 / price1
-                    buy_ratios.append(price_ratio)
-                else:
-                    # Для SELL: покупаем на второй бирже, продаем на первой
-                    price_ratio = price1 / price2
-                    sell_ratios.append(price_ratio)
-            
-            # Рассчитываем квартили для определения выбросов
-            buy_quartiles = calculate_quartiles(buy_ratios) if buy_ratios else None
-            sell_quartiles = calculate_quartiles(sell_ratios) if sell_ratios else None
-            
-            # Обновляем каждую запись в этой группе
             updated_in_group = 0
-            skipped_outliers_in_group = 0
-            skipped_small_in_group = 0
             
             for row in group_rows:
                 exchange_pair = row['exchange_pair']
@@ -227,53 +184,12 @@ def update_difference_values():
                 if price1 is None or price2 is None or price1 <= 0 or price2 <= 0:
                     continue
                 
-                total_checked += 1
-                
                 # Вычисляем разницу цен
                 if row['signal'] == 'BUY':
-                    # Проверяем на выбросы
-                    price_ratio = price2 / price1
-                    
-                    # Порог для "микроспредов" - если разница меньше 0.8%, считаем такие спреды валидными без проверки
-                    is_micro_spread = abs(price_ratio - 1.0) < 0.008
-                    
-                    # Если это не микроспред, проверяем на выбросы
-                    if not is_micro_spread and buy_quartiles and (price_ratio < buy_quartiles['lower_bound'] or price_ratio > buy_quartiles['upper_bound']):
-                        logger.warning(f"Выброс обнаружен: {row['id']}, {row['symbol']}, BUY, ratio={price_ratio:.4f}")
-                        skipped_outliers_in_group += 1
-                        total_skipped_outliers += 1
-                        continue
-                    
-                    # Для очень малых спредов можно игнорировать их
-                    if is_micro_spread:
-                        skipped_small_in_group += 1
-                        total_skipped_small += 1
-                        continue
-                        
                     # Формула для логарифмического спреда
                     log_spread = 100 * (price2 / price1 - 1)
                     difference = log_spread
-                    
                 else:  # SELL
-                    # Проверяем на выбросы
-                    price_ratio = price1 / price2
-                    
-                    # Порог для "микроспредов"
-                    is_micro_spread = abs(price_ratio - 1.0) < 0.008
-                    
-                    # Если это не микроспред, проверяем на выбросы
-                    if not is_micro_spread and sell_quartiles and (price_ratio < sell_quartiles['lower_bound'] or price_ratio > sell_quartiles['upper_bound']):
-                        logger.warning(f"Выброс обнаружен: {row['id']}, {row['symbol']}, SELL, ratio={price_ratio:.4f}")
-                        skipped_outliers_in_group += 1
-                        total_skipped_outliers += 1
-                        continue
-                    
-                    # Для очень малых спредов можно игнорировать их
-                    if is_micro_spread:
-                        skipped_small_in_group += 1
-                        total_skipped_small += 1
-                        continue
-                        
                     # Формула для логарифмического спреда
                     log_spread = 100 * (price1 / price2 - 1)
                     difference = log_spread
@@ -288,12 +204,7 @@ def update_difference_values():
                 updated_in_group += 1
             
             # Логируем статистику по группе
-            group_stats = f"Обновлено в группе {key}: {updated_in_group} записей"
-            if skipped_outliers_in_group > 0:
-                group_stats += f", пропущено выбросов: {skipped_outliers_in_group}"
-            if skipped_small_in_group > 0:
-                group_stats += f", пропущено микроспредов: {skipped_small_in_group}"
-            logger.info(group_stats)
+            logger.info(f"Обновлено в группе {key}: {updated_in_group} записей")
             
             total_updated += updated_in_group
             
@@ -301,65 +212,13 @@ def update_difference_values():
         conn.commit()
         
         # Выводим общую статистику
-        stats_summary = f"Всего обработано {total_checked} записей, обновлено {total_updated} записей" 
-        if total_skipped_outliers > 0:
-            stats_summary += f", пропущено выбросов: {total_skipped_outliers} ({total_skipped_outliers/total_checked*100:.1f}%)"
-        if total_skipped_small > 0:
-            stats_summary += f", пропущено микроспредов: {total_skipped_small} ({total_skipped_small/total_checked*100:.1f}%)"
-        
-        logger.info(stats_summary)
+        logger.info(f"Всего обновлено {total_updated} записей")
         
     except Exception as e:
         logger.error(f"Ошибка при обновлении значений разницы: {e}")
         conn.rollback()
     finally:
         conn.close()
-
-def calculate_quartiles(data):
-    """
-    Рассчитывает квартили для выявления выбросов по IQR методу
-    с дополнительной защитой от ложных срабатываний для малых колебаний
-    """
-    if not data:
-        return None
-        
-    # Сортируем данные
-    sorted_data = sorted(data)
-    n = len(sorted_data)
-    
-    # Находим квартили
-    q1_idx = int(n * 0.25)
-    q3_idx = int(n * 0.75)
-    
-    q1 = sorted_data[q1_idx]
-    q3 = sorted_data[q3_idx]
-    
-    # Межквартильный размах
-    iqr = q3 - q1
-    
-    # Устанавливаем минимальный порог для IQR, чтобы избежать ложных выбросов при малых колебаниях
-    # Увеличиваем порог с 0.005 до 0.02 (с 0.5% до 2%)
-    MIN_IQR_THRESHOLD = 0.02
-    
-    # Если IQR слишком мал, увеличиваем его до минимального порога
-    if iqr < MIN_IQR_THRESHOLD:
-        iqr = MIN_IQR_THRESHOLD
-    
-    # Увеличиваем множитель для границ выбросов с 3.0 до 5.0 для более консервативного подхода
-    # Это позволит считать выбросами только действительно значительные отклонения
-    iqr_multiplier = 5.0
-    
-    # Границы для выбросов с увеличенным множителем
-    lower_bound = q1 - iqr_multiplier * iqr
-    upper_bound = q3 + iqr_multiplier * iqr
-    
-    return {
-        "q1": q1,
-        "q3": q3,
-        "iqr": iqr,
-        "lower_bound": lower_bound,
-        "upper_bound": upper_bound
-    }
 
 def create_indexes():
     """
@@ -481,9 +340,10 @@ def update_exchange_fields():
     finally:
         conn.close()
 
-def cleanup_old_data(retention_days=30):
+def cleanup_old_data(retention_days=1):
     """
-    Удаляет старые данные из базы данных для оптимизации размера и производительности
+    Удаляет старые данные из базы данных для оптимизации размера и производительности.
+    По умолчанию оставляет данные только за последний день.
     
     :param retention_days: Количество дней, за которые сохраняются данные
     """
@@ -531,6 +391,11 @@ def cleanup_old_data(retention_days=30):
         conn.close()
 
 if __name__ == "__main__":
+    # Сначала очищаем старые данные, оставляя только последний день
+    cleanup_old_data(1)
+    logger.info("Очистка старых данных завершена")
+    
+    # Затем запускаем обычные процессы обновления
     update_database_structure()
     logger.info("Проверка структуры базы данных завершена")
     update_db()
@@ -540,6 +405,4 @@ if __name__ == "__main__":
     update_exchange_fields()
     # Заполняем значения разницы для существующих записей
     update_difference_values()
-    # Очищаем старые данные (оставляем данные только за последние 30 дней)
-    cleanup_old_data(30)
     logger.info("Все обновления базы данных завершены") 
