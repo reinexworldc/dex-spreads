@@ -72,21 +72,23 @@ const formatTimestampByTimeFrame = (timestamp: number, timeFrame: string): strin
   return `${date.getDate()}/${date.getMonth() + 1} ${date.getHours()}:00`
 }
 
-// Агрегация данных по временным интервалам
+// Функция для агрегации данных по временным интервалам - исправленная версия
 const aggregateDataByTimeFrame = (data: SpreadData[], timeFrame: string): { time: number, value: number }[] => {
   if (!data.length) return []
   
   const intervalSize = getIntervalSize(timeFrame)
   const result: { time: number, value: number, count: number }[] = []
   
-  // Сортируем данные по времени
+  // Сортируем данные по времени (важно для правильного построения графика)
   const sortedData = [...data].sort((a, b) => a.created - b.created)
   
   // Определяем начальный и конечный интервалы
   const startTime = Math.floor(sortedData[0].created / intervalSize) * intervalSize
-  const endTime = Math.floor(Date.now() / intervalSize) * intervalSize
+  const endTime = Math.ceil(sortedData[sortedData.length - 1].created / intervalSize) * intervalSize
   
-  // Создаем массив всех временных интервалов от начала до текущего момента
+  // Создаем массив всех временных интервалов от начала до конца данных
+  // Не используем текущее время (Date.now()), так как это может вызвать проблемы
+  // при долгой работе бота из-за смещения интервалов
   const timeIntervals: number[] = []
   for (let time = startTime; time <= endTime; time += intervalSize) {
     timeIntervals.push(time)
@@ -117,16 +119,34 @@ const aggregateDataByTimeFrame = (data: SpreadData[], timeFrame: string): { time
     }))
 }
 
-// Преобразование данных API в формат для графика с учетом временного фрейма
+// Преобразование данных API в формат для графика с учетом временного фрейма - исправленная версия
 const processChartData = (data: SpreadData[], exchange1: string, exchange2: string, timeFrame: string) => {
+  // Проверяем, что у нас есть данные
+  if (!data || data.length === 0) {
+    return {
+      labels: [],
+      datasets: [{
+        label: `Спред между ${exchange1} и ${exchange2} (%)`,
+        data: [],
+        borderColor: "rgb(99, 102, 241)",
+        backgroundColor: "rgba(99, 102, 241, 0.5)",
+        tension: 0.3,
+        pointRadius: 0,
+        pointHoverRadius: 5,
+      }]
+    }
+  }
+
   // Агрегируем данные по временным интервалам
   const aggregatedData = aggregateDataByTimeFrame(data, timeFrame)
   
-  const labels = aggregatedData.map(item => formatTimestampByTimeFrame(item.time, timeFrame))
-  const values = aggregatedData.map(item => item.value)
+  // Сортируем агрегированные данные по времени для правильного отображения
+  const sortedAggregatedData = [...aggregatedData].sort((a, b) => a.time - b.time)
   
-  // Находим экстремумы (максимальные и минимальные значения) - больше не нужно для аннотаций
-  // Но оставим для возможного использования в будущем
+  const labels = sortedAggregatedData.map(item => formatTimestampByTimeFrame(item.time, timeFrame))
+  const values = sortedAggregatedData.map(item => item.value)
+  
+  // Находим экстремумы (максимальные и минимальные значения)
   let maxValue = -Infinity;
   let minValue = Infinity;
   
@@ -152,7 +172,6 @@ const processChartData = (data: SpreadData[], exchange1: string, exchange2: stri
         pointHoverRadius: 5, // Show points on hover
       },
     ],
-    // Больше не добавляем информацию об экстремумах
   }
 }
 
@@ -184,12 +203,21 @@ const cacheData = (key: string, data: any, metaOnly: boolean = false) => {
       return true;
     }
 
+    // Если данных нет или это не массив, выходим
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      console.warn('Попытка сохранить пустые данные в кэш');
+      return false;
+    }
+
+    // Сначала сортируем данные по времени, чтобы обеспечить последовательность
+    const sortedData = [...data].sort((a, b) => a.created - b.created);
+    
     // Подготавливаем данные для сохранения
-    const dataStr = JSON.stringify(data);
+    const dataStr = JSON.stringify(sortedData);
     
     // Проверяем размер данных (в байтах)
     const dataSize = new Blob([dataStr]).size;
-    const MAX_SIZE = 2 * 1024 * 1024; // 2MB - устанавливаем ограничение для перестраховки
+    const MAX_SIZE = 1.5 * 1024 * 1024; // Уменьшаем до 1.5MB вместо 2MB
     
     if (dataSize > MAX_SIZE) {
       console.warn(`Данные слишком большие для кэширования (${(dataSize/1024/1024).toFixed(2)}MB). Сокращаем выборку.`);
@@ -197,7 +225,7 @@ const cacheData = (key: string, data: any, metaOnly: boolean = false) => {
       // Если это массив, сохраняем только последние N элементов
       if (Array.isArray(data) && data.length > 100) {
         // Берем только последние элементы (недавние данные важнее)
-        const reducedData = data.slice(-Math.floor(data.length * 0.5)); // 50% последних элементов
+        const reducedData = data.slice(-Math.floor(data.length * 0.4)); // 40% последних элементов вместо 50%
         return cacheData(key, reducedData); // Рекурсивно пробуем сохранить сокращенный набор
       }
       
@@ -219,19 +247,32 @@ const cacheData = (key: string, data: any, metaOnly: boolean = false) => {
       }
     }
     
-    const STORAGE_LIMIT = 5 * 1024 * 1024; // 5MB - консервативная оценка
+    const STORAGE_LIMIT = 4 * 1024 * 1024; // 4MB вместо 5MB - консервативная оценка
     if (totalSize + dataSize > STORAGE_LIMIT) {
       console.warn('Недостаточно места в localStorage. Запускаем очистку старых данных...');
       manageCache(true); // Принудительная очистка
     }
     
     // Сохраняем данные
-    localStorage.setItem(key, dataStr);
+    try {
+      localStorage.setItem(key, dataStr);
+    } catch (storageError) {
+      // Если не получилось сохранить, очищаем кэш радикально и пробуем еще раз
+      console.error('Ошибка при сохранении в localStorage. Пробуем радикальную очистку...', storageError);
+      clearAllCache();
+      try {
+        localStorage.setItem(key, dataStr);
+      } catch (secondError) {
+        console.error('Не удалось сохранить данные даже после очистки кэша', secondError);
+        return false;
+      }
+    }
     
     // Обновляем метаданные
     localStorage.setItem(`${key}-meta`, JSON.stringify({ 
       lastAccess: Date.now(),
-      size: dataSize
+      size: dataSize,
+      count: data.length
     }));
     
     return true;
@@ -248,8 +289,8 @@ const cacheData = (key: string, data: any, metaOnly: boolean = false) => {
       
       // Сокращаем данные и пробуем снова
       if (Array.isArray(data) && data.length > 50) {
-        // Берем только последние 30% элементов в критической ситуации
-        const emergencyData = data.slice(-Math.floor(data.length * 0.3));
+        // Берем только последние 20% элементов в критической ситуации (было 30%)
+        const emergencyData = data.slice(-Math.floor(data.length * 0.2));
         console.warn(`Аварийное сокращение данных: ${data.length} -> ${emergencyData.length} элементов`);
         return cacheData(key, emergencyData);
       }
@@ -268,10 +309,10 @@ const manageCache = (forceClean: boolean = false) => {
   const totalKeys = Object.keys(localStorage).filter(key => key.startsWith('spread-data-') && !key.endsWith('-meta'));
   
   // Если кэшированных данных больше допустимого количества или принудительная очистка
-  const MAX_CACHE_ITEMS = 5; // Уменьшаем до 5 (было 10)
+  const MAX_CACHE_ITEMS = 3; // Уменьшаем до 3 (было 5)
   if (forceClean || totalKeys.length > MAX_CACHE_ITEMS) {
     // Получаем время последнего доступа для каждого ключа из метаданных
-    const cacheMetadata: Record<string, { lastAccess: number, size?: number }> = {};
+    const cacheMetadata: Record<string, { lastAccess: number, size?: number, count?: number }> = {};
     
     for (const key of totalKeys) {
       try {
@@ -295,7 +336,7 @@ const manageCache = (forceClean: boolean = false) => {
     );
     
     // При принудительной очистке удаляем больше элементов
-    const keysToKeep = forceClean ? 2 : MAX_CACHE_ITEMS;
+    const keysToKeep = forceClean ? 1 : MAX_CACHE_ITEMS; // Оставляем только 1 элемент (было 2)
     
     // Удаляем самые старые ключи, оставляя только последние
     for (let i = 0; i < sortedKeys.length - keysToKeep; i++) {
@@ -402,34 +443,64 @@ export function SpreadChart({ pair, exchange1, exchange2, timeFrame = "24h", onT
           const parsedData = JSON.parse(cachedData);
           if (Array.isArray(parsedData) && parsedData.length > 0) {
             console.log(`Загружено ${parsedData.length} точек из кэша для ${cacheKey}`);
-            setRawData(parsedData);
-            setPointsCount(parsedData.length);
             
-            // Обрабатываем данные для графика
-            const processedData = processChartData(parsedData, exchange1, exchange2, localTimeFrame);
-            setChartData(processedData);
+            // Убедимся, что данные отсортированы по времени
+            const sortedData = [...parsedData].sort((a, b) => a.created - b.created);
             
-            // Вычисляем текущий и максимальный спред
-            const currentSpreadValue = parsedData[parsedData.length - 1]?.difference || 0;
-            setCurrentSpread(currentSpreadValue);
+            // Проверяем возраст кэша - если он старше 1 часа, не используем его
+            const oldestPoint = sortedData[0];
+            const newestPoint = sortedData[sortedData.length - 1];
+            const currentTime = Date.now();
             
-            const maxSpreadValue = Math.max(...parsedData.map(item => item.difference));
-            setMaxSpread(maxSpreadValue);
+            // Данные старше 1 часа считаем устаревшими
+            const MAX_CACHE_AGE = 60 * 60 * 1000; // 1 час в миллисекундах
             
-            setLoading(false);
-            
-            // Обновляем метаданные кэша
-            updateCacheMetadata(cacheKey);
-            
-            return;
+            // Проверка, что последняя точка не слишком старая
+            if (newestPoint && 
+                ((newestPoint.created > 9999999999 && currentTime - newestPoint.created < MAX_CACHE_AGE) || 
+                 (newestPoint.created < 9999999999 && currentTime - newestPoint.created * 1000 < MAX_CACHE_AGE))) {
+              
+              setRawData(sortedData);
+              setPointsCount(sortedData.length);
+              
+              // Обрабатываем данные для графика
+              const processedData = processChartData(sortedData, exchange1, exchange2, localTimeFrame);
+              setChartData(processedData);
+              
+              // Вычисляем текущий и максимальный спред
+              const currentSpreadValue = sortedData[sortedData.length - 1]?.difference || 0;
+              setCurrentSpread(currentSpreadValue);
+              
+              const maxSpreadValue = Math.max(...sortedData.map(item => item.difference));
+              setMaxSpread(maxSpreadValue);
+              
+              setLoading(false);
+              
+              // Обновляем метаданные кэша
+              updateCacheMetadata(cacheKey);
+              
+              return;
+            } else {
+              console.log('Кэш устарел, загружаем свежие данные...');
+              // Удаляем устаревший кэш
+              localStorage.removeItem(cacheKey);
+              localStorage.removeItem(`${cacheKey}-meta`);
+            }
           }
         }
       } catch (err) {
         console.error("Ошибка при чтении кэша:", err);
+        // При ошибке чтения кэша удаляем его, чтобы не создавать проблем в будущем
+        try {
+          localStorage.removeItem(cacheKey);
+          localStorage.removeItem(`${cacheKey}-meta`);
+        } catch {
+          // Игнорируем возможные ошибки при удалении
+        }
       }
     }
     
-    // Если кэша нет, сбрасываем данные
+    // Если кэша нет или он устарел, сбрасываем данные
     setRawData([]);
   }, [pair, exchange1, exchange2, localTimeFrame]);
 
@@ -622,15 +693,23 @@ export function SpreadChart({ pair, exchange1, exchange2, timeFrame = "24h", onT
           updatedData = apiData;
         }
         
-        // Ограничиваем количество сохраняемых точек для производительности
-        // Для более долгих таймфреймов храним больше точек
+        // Ограничиваем количество сохраняемых точек для производительности 
+        // и предотвращения проблем с отображением графика
+        // Ограничение зависит от времени фрейма
         const maxPoints = localTimeFrame === '1m' ? 1000 : 
-                          localTimeFrame === '5m' ? 2000 :
-                          localTimeFrame === '15m' ? 3000 : 5000;
+                         localTimeFrame === '5m' ? 1500 :
+                         localTimeFrame === '15m' ? 2000 :
+                         localTimeFrame === '30m' ? 2500 :
+                         localTimeFrame === '1h' ? 3000 :
+                         localTimeFrame === '3h' ? 3500 :
+                         localTimeFrame === '6h' ? 4000 : 4500;
                           
         // Если точек слишком много, удаляем самые старые
         if (updatedData.length > maxPoints) {
+          // Сначала сортируем данные, чтобы быть уверенными, что удаляем самые старые
+          updatedData = [...updatedData].sort((a, b) => a.created - b.created);
           updatedData = updatedData.slice(-maxPoints);
+          console.log(`Данные обрезаны до ${maxPoints} точек для сохранения производительности`);
         }
         
         // Сохраняем количество точек для отображения
@@ -680,27 +759,68 @@ export function SpreadChart({ pair, exchange1, exchange2, timeFrame = "24h", onT
       
       if (localTimeFrame === '1m') interval = 10000; // 10 секунд для 1-минутного графика
       else if (localTimeFrame === '5m') interval = 20000; // 20 секунд для 5-минутного графика
-      else if (localTimeFrame === '24h') interval = 60000; // 1 минута для дневного графика
+      else if (localTimeFrame === '15m') interval = 30000; // 30 секунд для 15-минутного графика
+      else if (localTimeFrame === '30m') interval = 45000; // 45 секунд для 30-минутного графика
+      else if (localTimeFrame === '1h') interval = 60000; // 1 минута для часового графика
+      else if (localTimeFrame === '3h') interval = 120000; // 2 минуты для 3-часового графика
+      else if (localTimeFrame === '6h') interval = 180000; // 3 минуты для 6-часового графика
+      else if (localTimeFrame === '24h') interval = 300000; // 5 минут для дневного графика
       
       // Очищаем предыдущий интервал, если есть
-      if (refreshInterval) clearInterval(refreshInterval);
+      if (refreshInterval) {
+        clearInterval(refreshInterval);
+        setRefreshInterval(null);
+      }
       
-      // Устанавливаем новый интервал
-      const newInterval = setInterval(loadData, interval);
-      setRefreshInterval(newInterval as unknown as number);
+      // Используем setTimeout вместо setInterval для более надежной работы
+      // setInterval может накапливать запросы если браузер неактивен
+      const runTimedFetch = () => {
+        const timerID = setTimeout(async () => {
+          // Проверяем, активен ли компонент
+          if (chartRef.current) {
+            try {
+              // Запускаем обновление данных
+              await loadData();
+              // Планируем следующее обновление
+              runTimedFetch();
+            } catch (err) {
+              console.error("Ошибка при плановом обновлении:", err);
+              // Даже при ошибке планируем следующее обновление
+              runTimedFetch();
+            }
+          }
+        }, interval);
+        
+        // Сохраняем ID таймера для возможности его остановки
+        setRefreshInterval(timerID as unknown as number);
+      };
       
+      // Запускаем цепочку обновлений
+      runTimedFetch();
+      
+      // Очистка при размонтировании компонента
       return () => {
-        if (newInterval) clearInterval(newInterval);
+        if (refreshInterval) {
+          clearTimeout(refreshInterval);
+          setRefreshInterval(null);
+        }
       };
     }
     
+    // Очистка при отключенном автообновлении
     return () => {
-      if (refreshInterval) clearInterval(refreshInterval);
+      if (refreshInterval) {
+        clearTimeout(refreshInterval);
+        setRefreshInterval(null);
+      }
     };
   }, [pair, exchange1, exchange2, localTimeFrame, autoRefresh]);
 
   // Обработчик смены временного фрейма
   const handleTimeFrameChange = (value: string) => {
+    // Сбрасываем все данные при смене временного фрейма,
+    // чтобы гарантировать согласованность отображаемых данных
+    setRawData([]);
     setLocalTimeFrame(value);
     
     // Уведомляем родительский компонент о смене фрейма
@@ -708,6 +828,7 @@ export function SpreadChart({ pair, exchange1, exchange2, timeFrame = "24h", onT
       onTimeFrameChange(value)
     }
     
+    // Сбрасываем масштаб
     resetZoom();
   }
 

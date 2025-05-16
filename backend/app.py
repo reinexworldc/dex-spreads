@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timedelta
 import json
 from flask_cors import CORS
+import os
 
 # Настройка логгера для Flask приложения
 logger = logging.getLogger("paradex_app.web")
@@ -27,7 +28,16 @@ EXCHANGE_NAMES = {
 }
 
 def get_db_connection():
-    conn = sqlite3.connect('/app/data/db.sqlite3')
+    # Определяем путь к базе данных в зависимости от окружения
+    if os.path.exists('/app'):
+        # В Docker-контейнере
+        db_path = '/app/data/db.sqlite3'
+    else:
+        # Локальный запуск
+        db_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+        db_path = os.path.join(db_dir, 'db.sqlite3')
+    
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -688,6 +698,14 @@ def get_summary():
             if not pair_rows:
                 continue
                 
+            # Получаем символ из последней записи для этой пары
+            current_symbol = pair_rows[0]['symbol'] if pair_rows and 'symbol' in pair_rows[0] else "ETH/USDT"
+            
+            # Преобразуем символ в удобный формат для отображения в таблице
+            formatted_symbol = current_symbol
+            if "_PERP" in formatted_symbol:
+                formatted_symbol = formatted_symbol.replace("_PERP", "").replace("_", "/")
+            
             # Собираем все значения разниц с разделением по сигналам
             buy_spreads = []
             sell_spreads = []
@@ -747,6 +765,9 @@ def get_summary():
             # Формируем объект с результатами статистического анализа
             summary[pair] = {
                 'name': formatted_pair,
+                'symbol': formatted_symbol,  # Добавляем символ пары в ответ
+                'formatted_exchange1': EXCHANGE_NAMES.get(exchange1, exchange1),
+                'formatted_exchange2': EXCHANGE_NAMES.get(exchange2, exchange2),
                 # Данные по BUY спредам
                 'median_buy_spread': round(buy_median, 2) if buy_median is not None else None,
                 'min_buy_spread': round(buy_min, 2) if buy_min is not None else None,

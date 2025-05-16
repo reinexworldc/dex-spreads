@@ -1,10 +1,24 @@
 from sqlalchemy import String, Float, BigInteger
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
+import os
 
+# Определяем путь к базе данных в зависимости от окружения
+def get_db_path():
+    if os.path.exists('/app'):
+        # Работаем в Docker
+        return "sqlite+aiosqlite:////app/data/db.sqlite3"
+    else:
+        # Локальный запуск
+        db_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'data')
+        # Создаем директорию, если не существует
+        os.makedirs(db_dir, exist_ok=True)
+        # Формируем путь к файлу базы данных
+        db_path = os.path.join(db_dir, 'db.sqlite3')
+        return f"sqlite+aiosqlite:///{db_path}"
 
-
-engine = create_async_engine(url = "sqlite+aiosqlite:////app/data/db.sqlite3")
+# Создаем движок базы данных с динамическим путем
+engine = create_async_engine(url=get_db_path())
 async_session = async_sessionmaker(engine)
 
 

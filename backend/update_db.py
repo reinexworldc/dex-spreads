@@ -5,13 +5,30 @@ import logging
 # Получаем логгер для модуля
 logger = logging.getLogger("paradex_app.db_update")
 
+# Функция для определения пути к базе данных
+def get_db_path():
+    """
+    Определяет путь к файлу базы данных в зависимости от окружения
+    """
+    if os.path.exists('/app'):
+        # В Docker-контейнере
+        db_dir = '/app/data'
+    else:
+        # Локальный запуск
+        db_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+        # Создаем директорию, если не существует
+        os.makedirs(db_dir, exist_ok=True)
+    
+    return os.path.join(db_dir, 'db.sqlite3')
+
 def create_spreads_table_if_not_exists():
     """
     Создает таблицу spreads, если она не существует
     """
     logger.info("Проверка наличия таблицы spreads...")
     
-    conn = sqlite3.connect('/app/data/db.sqlite3')
+    db_path = get_db_path()
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     try:
@@ -60,7 +77,8 @@ def update_database_structure():
     logger.info("Проверка и обновление структуры базы данных...")
     
     # Подключаемся к базе данных
-    conn = sqlite3.connect('/app/data/db.sqlite3')
+    db_path = get_db_path()
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     try:
@@ -118,7 +136,8 @@ def update_difference_values():
     """
     logger.info("Обновление значений разницы цен (логарифмический метод)...")
     
-    conn = sqlite3.connect('/app/data/db.sqlite3')
+    db_path = get_db_path()
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
@@ -288,8 +307,12 @@ def update_db():
     """
     Основная функция обновления базы данных
     """
+    # Получаем путь к базе данных
+    db_path = get_db_path()
+    db_dir = os.path.dirname(db_path)
+    
     # Создаем директорию для базы данных, если она не существует
-    os.makedirs(os.path.dirname('/app/data/db.sqlite3'), exist_ok=True)
+    os.makedirs(db_dir, exist_ok=True)
     
     # Настраиваем логирование
     logging.basicConfig(
@@ -313,7 +336,8 @@ def update_exchange_fields():
     """
     logger.info("Обновление полей exchange1 и exchange2...")
     
-    conn = sqlite3.connect('/app/data/db.sqlite3')
+    db_path = get_db_path()
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     try:

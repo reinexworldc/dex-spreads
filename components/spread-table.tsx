@@ -79,9 +79,26 @@ export function SpreadTable({ highlightExchanges = [], timeFrame = "24h", onTime
           const avgPrice1 = 1000 + Math.random() * 100 // фиктивные данные
           const avgPrice2 = avgPrice1 * (1 + data.avg_buy_spread / 100)
           
+          // Пробуем получить символ из localStorage
+          let selectedPair = "ETH/USDT";
+          try {
+            const savedSettings = localStorage.getItem("dex-spread-monitor-settings");
+            if (savedSettings) {
+              const settings = JSON.parse(savedSettings);
+              if (settings.selectedPair) {
+                selectedPair = settings.selectedPair;
+              }
+            }
+          } catch (err) {
+            console.error("Ошибка при получении символа из localStorage:", err);
+          }
+          
+          // Получаем символ из данных, если он есть
+          const symbol = data.symbol || selectedPair
+          
           return {
             id: index + 1,
-            pair: "ETH/USDT", // Это поле нужно будет получать из API в будущем
+            pair: symbol, // Используем символ из API или выбранный пользователем символ
             exchange1: data.formatted_exchange1 || exchange1,
             exchange2: data.formatted_exchange2 || exchange2,
             price1: avgPrice1,

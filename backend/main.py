@@ -64,7 +64,15 @@ async def main():
     os.system("cls || clear")
 
     # Создаем директорию для базы данных, если ее не существует
-    db_dir = '/app/data'
+    # Используем относительный путь вместо абсолютного для локального запуска
+    # Проверяем, работаем ли мы в Docker
+    if os.path.exists('/app'):
+        # Запуск в Docker
+        db_dir = '/app/data'
+    else:
+        # Локальный запуск
+        db_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+    
     db_path = f'{db_dir}/db.sqlite3'
     
     try:
