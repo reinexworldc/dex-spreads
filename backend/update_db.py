@@ -168,6 +168,9 @@ def update_difference_values():
         stats_sample_size = 200
         
         total_updated = 0
+        total_checked = 0
+        total_skipped_outliers = 0
+        total_skipped_small = 0
         
         # Обрабатываем каждую группу отдельно для повышения точности
         for key, group_rows in grouped_data.items():
@@ -208,6 +211,8 @@ def update_difference_values():
             
             # Обновляем каждую запись в этой группе
             updated_in_group = 0
+            skipped_outliers_in_group = 0
+            skipped_small_in_group = 0
             
             for row in group_rows:
                 exchange_pair = row['exchange_pair']
@@ -221,14 +226,27 @@ def update_difference_values():
                 if price1 is None or price2 is None or price1 <= 0 or price2 <= 0:
                     continue
                 
+                total_checked += 1
+                
                 # Вычисляем разницу цен
                 if row['signal'] == 'BUY':
                     # Проверяем на выбросы
                     price_ratio = price2 / price1
                     
-                    # Если у нас есть статистика и коэффициент цены выходит за допустимые пределы
-                    if buy_quartiles and (price_ratio < buy_quartiles['lower_bound'] or price_ratio > buy_quartiles['upper_bound']):
+                    # Порог для "микроспредов" - если разница меньше 0.1%, считаем такие спреды валидными без проверки
+                    is_micro_spread = abs(price_ratio - 1.0) < 0.001
+                    
+                    # Если это не микроспред, проверяем на выбросы
+                    if not is_micro_spread and buy_quartiles and (price_ratio < buy_quartiles['lower_bound'] or price_ratio > buy_quartiles['upper_bound']):
                         logger.warning(f"Выброс обнаружен: {row['id']}, {row['symbol']}, BUY, ratio={price_ratio:.4f}")
+                        skipped_outliers_in_group += 1
+                        total_skipped_outliers += 1
+                        continue
+                    
+                    # Для очень малых спредов можно игнорировать их
+                    if is_micro_spread:
+                        skipped_small_in_group += 1
+                        total_skipped_small += 1
                         continue
                         
                     # Формула для логарифмического спреда
@@ -239,9 +257,20 @@ def update_difference_values():
                     # Проверяем на выбросы
                     price_ratio = price1 / price2
                     
-                    # Если у нас есть статистика и коэффициент цены выходит за допустимые пределы
-                    if sell_quartiles and (price_ratio < sell_quartiles['lower_bound'] or price_ratio > sell_quartiles['upper_bound']):
+                    # Порог для "микроспредов"
+                    is_micro_spread = abs(price_ratio - 1.0) < 0.001
+                    
+                    # Если это не микроспред, проверяем на выбросы
+                    if not is_micro_spread and sell_quartiles and (price_ratio < sell_quartiles['lower_bound'] or price_ratio > sell_quartiles['upper_bound']):
                         logger.warning(f"Выброс обнаружен: {row['id']}, {row['symbol']}, SELL, ratio={price_ratio:.4f}")
+                        skipped_outliers_in_group += 1
+                        total_skipped_outliers += 1
+                        continue
+                    
+                    # Для очень малых спредов можно игнорировать их
+                    if is_micro_spread:
+                        skipped_small_in_group += 1
+                        total_skipped_small += 1
                         continue
                         
                     # Формула для логарифмического спреда
@@ -257,12 +286,27 @@ def update_difference_values():
                 
                 updated_in_group += 1
             
-            logger.info(f"Обновлено в группе {key}: {updated_in_group} записей")
+            # Логируем статистику по группе
+            group_stats = f"Обновлено в группе {key}: {updated_in_group} записей"
+            if skipped_outliers_in_group > 0:
+                group_stats += f", пропущено выбросов: {skipped_outliers_in_group}"
+            if skipped_small_in_group > 0:
+                group_stats += f", пропущено микроспредов: {skipped_small_in_group}"
+            logger.info(group_stats)
+            
             total_updated += updated_in_group
             
         # Подтверждаем изменения
         conn.commit()
-        logger.info(f"Всего обновлено записей: {total_updated}")
+        
+        # Выводим общую статистику
+        stats_summary = f"Всего обработано {total_checked} записей, обновлено {total_updated} записей" 
+        if total_skipped_outliers > 0:
+            stats_summary += f", пропущено выбросов: {total_skipped_outliers} ({total_skipped_outliers/total_checked*100:.1f}%)"
+        if total_skipped_small > 0:
+            stats_summary += f", пропущено микроспредов: {total_skipped_small} ({total_skipped_small/total_checked*100:.1f}%)"
+        
+        logger.info(stats_summary)
         
     except Exception as e:
         logger.error(f"Ошибка при обновлении значений разницы: {e}")
@@ -273,6 +317,7 @@ def update_difference_values():
 def calculate_quartiles(data):
     """
     Рассчитывает квартили для выявления выбросов по IQR методу
+    с дополнительной защитой от ложных срабатываний для малых колебаний
     """
     if not data:
         return None
@@ -291,9 +336,21 @@ def calculate_quartiles(data):
     # Межквартильный размах
     iqr = q3 - q1
     
-    # Границы для выбросов (стандартный множитель 1.5)
-    lower_bound = q1 - 1.5 * iqr
-    upper_bound = q3 + 1.5 * iqr
+    # Устанавливаем минимальный порог для IQR, чтобы избежать ложных выбросов при малых колебаниях
+    # Для спредов разумно установить минимальный порог в 0.5%
+    MIN_IQR_THRESHOLD = 0.005
+    
+    # Если IQR слишком мал, увеличиваем его до минимального порога
+    if iqr < MIN_IQR_THRESHOLD:
+        iqr = MIN_IQR_THRESHOLD
+    
+    # Увеличиваем множитель для границ выбросов с 1.5 до 3.0 для более консервативного подхода
+    # Это позволит считать выбросами только действительно значительные отклонения
+    iqr_multiplier = 3.0
+    
+    # Границы для выбросов с увеличенным множителем
+    lower_bound = q1 - iqr_multiplier * iqr
+    upper_bound = q3 + iqr_multiplier * iqr
     
     return {
         "q1": q1,

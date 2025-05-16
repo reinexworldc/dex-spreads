@@ -11,7 +11,8 @@ import os
 logger = logging.getLogger("paradex_app.web")
 
 app = Flask(__name__)
-CORS(app)
+# Настраиваем CORS для всех источников, чтобы React-приложение могло делать запросы
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 # Доступные пары бирж
 EXCHANGE_PAIRS = [

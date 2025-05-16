@@ -16,6 +16,14 @@ function getApiBaseUrl() {
   if (typeof window !== 'undefined' && window.ENV_CONFIG && window.ENV_CONFIG.API_URL) {
     return window.ENV_CONFIG.API_URL;
   }
+  
+  // Используем полный URL с портом для доступа к Flask-серверу
+  if (typeof window !== 'undefined') {
+    // Локальная разработка - указываем явно адрес Flask
+    return 'http://localhost:5000';
+  }
+  
+  // Для SSR или Docker среды
   return process.env.NEXT_PUBLIC_API_URL || '/api';
 }
 
