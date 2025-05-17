@@ -117,6 +117,7 @@ export interface OrderbookData {
   totalVolume: number;
   updatedAt: string;
   is_generated?: boolean;
+  isFake?: boolean;
   error?: string;
 }
 

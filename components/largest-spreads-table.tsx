@@ -5,23 +5,8 @@ import * as React from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Button } from "@/components/ui/button"
-import { Clock, RefreshCw } from "lucide-react"
-import { motion } from "framer-motion"
 import { fetchLargestSpreads, fetchSpreadData, DataQueryParams } from "@/services/api"
-
-// Доступные временные фреймы
-const TIME_FRAMES = [
-  { value: "1m", label: "1 минута" },
-  { value: "5m", label: "5 минут" },
-  { value: "15m", label: "15 минут" },
-  { value: "30m", label: "30 минут" },
-  { value: "1h", label: "1 час" },
-  { value: "3h", label: "3 часа" },
-  { value: "6h", label: "6 часов" },
-  { value: "24h", label: "1 день" }
-]
+import { motion } from "framer-motion"
 
 interface LargestSpread {
   id: number
@@ -522,33 +507,7 @@ export function LargestSpreadsTable({ onSymbolSelect }: LargestSpreadsTableProps
   return (
     <div className="w-full overflow-auto">
       <div className="flex justify-between items-center mb-4">
-        <div className="flex items-center gap-2">
-          <Select value={localTimeFrame} onValueChange={handleTimeFrameChange}>
-            <SelectTrigger className="w-[140px]">
-              <Clock className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Выберите фрейм" />
-            </SelectTrigger>
-            <SelectContent>
-              {TIME_FRAMES.map((frame) => (
-                <SelectItem key={frame.value} value={frame.value}>
-                  {frame.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          
-          <Button 
-            variant={autoRefresh ? "default" : "outline"} 
-            size="sm" 
-            onClick={toggleAutoRefresh}
-            className="flex items-center gap-1"
-            disabled={updating}
-          >
-            <RefreshCw className={`h-4 w-4 ${autoRefresh || updating ? 'animate-spin' : ''}`} />
-            {updating ? 'Обновление...' : autoRefresh ? 'Авто' : 'Вручную'}
-          </Button>
-        </div>
-        
+        <div className="text-base font-medium">Текущие спреды между биржами</div>
         <div className="text-xs text-muted-foreground">
           Последнее обновление: {new Date(lastUpdate).toLocaleTimeString()}
         </div>
