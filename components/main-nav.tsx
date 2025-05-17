@@ -10,23 +10,11 @@ export function MainNav() {
 
   return (
     <div className="mr-4 flex">
-      <Link href="/" className="mr-6 flex items-center space-x-2">
+      <Link href="/largest-spreads" className="mr-6 flex items-center space-x-2">
         <LineChart className="h-6 w-6" />
         <span className="hidden font-bold sm:inline-block">DEX Spread Monitor</span>
       </Link>
       <nav className="flex items-center space-x-6 text-sm font-medium">
-        <Link
-          href="/"
-          className={cn(
-            "transition-colors hover:text-foreground/80",
-            pathname === "/" ? "text-foreground" : "text-foreground/60",
-          )}
-        >
-          <div className="flex items-center gap-1">
-            <LineChart className="h-4 w-4" />
-            <span>Главная</span>
-          </div>
-        </Link>
         <Link
           href="/largest-spreads"
           className={cn(

@@ -10,6 +10,15 @@ const nextConfig = {
     unoptimized: true,
   },
   output: 'standalone',
+  async redirects() {
+    return [
+      {
+        source: '/',
+        destination: '/largest-spreads',
+        permanent: true,
+      },
+    ]
+  },
 }
 
 export default nextConfig

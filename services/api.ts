@@ -23,7 +23,8 @@ function getApiBaseUrl() {
     if (window.location.hostname !== 'localhost') {
       return '/api';
     }
-    // Локальная разработка - указываем явно адрес Flask
+    // Локальная разработка - указываем явно адрес Flask без /api префикса
+    // т.к. префикс добавляется в каждом методе API
     return 'http://localhost:5000';
   }
   
@@ -98,6 +99,28 @@ export interface SymbolData {
 }
 
 /**
+ * Интерфейс для данных стакана ордеров (orderbook)
+ */
+export interface OrderbookData {
+  symbol: string;
+  exchange: string;
+  timestamp: number;
+  bids: {
+    price: number;
+    volume: number;
+  }[];
+  asks: {
+    price: number;
+    volume: number;
+  }[];
+  spread: number;
+  totalVolume: number;
+  updatedAt: string;
+  is_generated?: boolean;
+  error?: string;
+}
+
+/**
  * Функция для получения данных о спредах
  */
 export async function fetchSpreadData(params: DataQueryParams): Promise<SpreadData[]> {
@@ -112,7 +135,7 @@ export async function fetchSpreadData(params: DataQueryParams): Promise<SpreadDa
   if (params.since) queryParams.append('since', params.since.toString());
 
   try {
-    const response = await fetch(`${API_BASE_URL}/data?${queryParams.toString()}`);
+    const response = await fetch(`${API_BASE_URL}/api/data?${queryParams.toString()}`);
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
     }
@@ -128,7 +151,7 @@ export async function fetchSpreadData(params: DataQueryParams): Promise<SpreadDa
  */
 export async function fetchSummary(timeRange: string): Promise<Record<string, any>> {
   try {
-    const response = await fetch(`${API_BASE_URL}/summary?time_range=${timeRange}`);
+    const response = await fetch(`${API_BASE_URL}/api/summary?time_range=${timeRange}`);
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
     }
@@ -144,7 +167,7 @@ export async function fetchSummary(timeRange: string): Promise<Record<string, an
  */
 export async function fetchExchangePairs(): Promise<ExchangePair[]> {
   try {
-    const response = await fetch(`${API_BASE_URL}/exchange_pairs`);
+    const response = await fetch(`${API_BASE_URL}/api/exchange_pairs`);
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
     }
@@ -161,7 +184,7 @@ export async function fetchExchangePairs(): Promise<ExchangePair[]> {
 export async function fetchSymbols(): Promise<SymbolData[]> {
   try {
     // Эндпоинт для получения списка символов нужно реализовать на бэкенде
-    const response = await fetch(`${API_BASE_URL}/symbols`);
+    const response = await fetch(`${API_BASE_URL}/api/symbols`);
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
     }
@@ -177,13 +200,64 @@ export async function fetchSymbols(): Promise<SymbolData[]> {
  */
 export async function fetchLargestSpreads(timeRange: string): Promise<LargestSpread[]> {
   try {
-    const response = await fetch(`${API_BASE_URL}/largest_spreads_api?time_range=${timeRange}`);
+    const response = await fetch(`${API_BASE_URL}/api/largest_spreads_api?time_range=${timeRange}`);
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
     }
     return await response.json();
   } catch (error) {
     console.error('Error fetching largest spreads:', error);
+    throw error;
+  }
+}
+
+/**
+ * Функция для получения данных о стакане ордеров (orderbook)
+ */
+export async function fetchOrderbookData(exchange: string, symbol: string, retryCount = 2): Promise<OrderbookData> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/orderbook?exchange=${exchange}&symbol=${symbol}`);
+    
+    // Получаем данные из ответа, даже если статус не OK, чтобы извлечь сообщение об ошибке
+    const data = await response.json();
+    
+    if (!response.ok) {
+      // Если сервер возвращает ошибку и статус >= 500, можно попробовать повторить запрос
+      if (retryCount > 0 && response.status >= 500) {
+        console.info(`Повторная попытка запроса orderbook для ${exchange} ${symbol}, осталось попыток: ${retryCount}`);
+        // Ждем 500мс перед повторной попыткой
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return fetchOrderbookData(exchange, symbol, retryCount - 1);
+      }
+      
+      // Включаем сообщение об ошибке из ответа сервера, если оно есть
+      throw new Error(
+        data.error 
+          ? `API error (${response.status}): ${data.error}` 
+          : `API error: ${response.status}`
+      );
+    }
+    
+    // Проверяем, есть ли в данных признак ошибки
+    if (data.error) {
+      console.warn(`Orderbook API вернул ошибку: ${data.error}`);
+      throw new Error(`API error: ${data.error}`);
+    }
+    
+    // Нормализуем данные - убедимся, что bids и asks всегда массивы
+    if (data.bids && !Array.isArray(data.bids)) {
+      data.bids = [data.bids];
+    }
+    
+    if (data.asks && !Array.isArray(data.asks)) {
+      data.asks = [data.asks];
+    }
+    
+    return data;
+  } catch (error) {
+    console.error(`Error fetching orderbook data for ${exchange} ${symbol}:`, error);
+    
+    // Не генерируем локальные фейковые данные, а пробрасываем ошибку дальше
     throw error;
   }
 } 

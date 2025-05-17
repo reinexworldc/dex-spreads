@@ -1,0 +1,29 @@
+
+> my-v0-project@0.1.0 dev
+> next dev
+
+   ▲ Next.js 15.2.4
+   - Local:        http://localhost:3000
+   - Network:      http://10.255.255.254:3000
+
+ ✓ Starting...
+ ✓ Ready in 2.1s
+ ○ Compiling / ...
+ ✓ Compiled / in 2.9s (1719 modules)
+ GET / 200 in 3366ms
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 701ms (1723 modules)
+ GET /env-config.js 404 in 831ms
+ GET / 200 in 140ms
+ GET /env-config.js 404 in 36ms
+ GET / 200 in 65ms
+ GET /env-config.js 404 in 46ms
+ GET / 200 in 49ms
+ GET /env-config.js 404 in 41ms
+ ✓ Compiled in 484ms (1719 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename '/home/excalibur/dex-spreads/.next/cache/webpack/server-development/1.pack.gz_' -> '/home/excalibur/dex-spreads/.next/cache/webpack/server-development/1.pack.gz'
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename '/home/excalibur/dex-spreads/.next/cache/webpack/client-development/3.pack.gz_' -> '/home/excalibur/dex-spreads/.next/cache/webpack/client-development/3.pack.gz'
+ ✓ Compiled in 288ms (1719 modules)
+ ✓ Compiled in 482ms (1719 modules)
+ ✓ Compiled in 268ms (1719 modules)
+[?25h

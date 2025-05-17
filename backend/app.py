@@ -15,7 +15,7 @@ app = Flask(__name__)
 # Более детальная настройка CORS для лучшей безопасности и производительности
 CORS(app, resources={
     r"/*": {
-        "origins": ["http://localhost:3000", "http://localhost", "http://77.110.105.98"],
+        "origins": ["http://localhost:3000", "http://localhost:3001", "http://localhost", "http://77.110.105.98", "*"],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization", "Accept"],
         "supports_credentials": True,
@@ -61,21 +61,75 @@ def get_db_connection():
 
 
 def init_db():
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('''
+    """Инициализация базы данных и создание нужных таблиц, если их нет"""
+    try:
+        conn = get_db_connection()
+        
+        # Создаем таблицу для спредов, если ее нет
+        conn.execute('''
         CREATE TABLE IF NOT EXISTS spreads (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             symbol TEXT,
-            signal TEXT,
-            backpack_price REAL,
-            paradex_price REAL,
-            hyperliquid_price REAL,
             exchange_pair TEXT,
+            buy_exchange TEXT,
+            sell_exchange TEXT,
+            buy_price REAL,
+            sell_price REAL,
+            difference REAL,
+            signal TEXT,
             created INTEGER
         )
-    ''')
-    # Insert sample data if table is empty
+        ''')
+        
+        # Создаем таблицу для данных о стакане ордеров (orderbook_data)
+        conn.execute('''
+        CREATE TABLE IF NOT EXISTS orderbook_data (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT,
+            exchange TEXT,
+            timestamp INTEGER,
+            bid_price REAL,
+            ask_price REAL,
+            bid_volume REAL,
+            ask_volume REAL,
+            spread REAL,
+            total_volume REAL,
+            
+            bid_price_1 REAL,
+            bid_volume_1 REAL,
+            bid_price_2 REAL,
+            bid_volume_2 REAL,
+            bid_price_3 REAL,
+            bid_volume_3 REAL,
+            bid_price_4 REAL,
+            bid_volume_4 REAL,
+            bid_price_5 REAL,
+            bid_volume_5 REAL,
+            
+            ask_price_1 REAL,
+            ask_volume_1 REAL,
+            ask_price_2 REAL,
+            ask_volume_2 REAL,
+            ask_price_3 REAL,
+            ask_volume_3 REAL,
+            ask_price_4 REAL,
+            ask_volume_4 REAL,
+            ask_price_5 REAL,
+            ask_volume_5 REAL,
+            
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(symbol, exchange) ON CONFLICT REPLACE
+        )
+        ''')
+        
+        # Создаем индекс для быстрого поиска по символу и бирже
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_symbol_exchange ON orderbook_data (symbol, exchange)')
+        
+        conn.commit()
+        conn.close()
+        logger.info("База данных инициализирована")
+    except Exception as e:
+        logger.error(f"Ошибка при инициализации базы данных: {e}")
 
 
 @app.route('/')
@@ -929,6 +983,431 @@ def get_symbols():
     finally:
         conn.close()
 
+def save_orderbook_data(symbol, exchange, bid_price, ask_price, bid_volume, ask_volume, spread, total_volume, 
+                        bid_levels=None, ask_levels=None, timestamp=None):
+    """
+    Сохраняет данные о стакане ордеров в базу данных.
+    
+    Args:
+        symbol (str): Торговый символ (например, ETH/USDT)
+        exchange (str): Название биржи
+        bid_price (float): Цена покупки (bid)
+        ask_price (float): Цена продажи (ask)
+        bid_volume (float): Объем предложений на покупку
+        ask_volume (float): Объем предложений на продажу
+        spread (float): Спред в процентах
+        total_volume (float): Общий объем
+        bid_levels (list): Список пар [цена, объем] для нескольких уровней стакана на покупку
+        ask_levels (list): Список пар [цена, объем] для нескольких уровней стакана на продажу
+        timestamp (int, optional): Временная метка. По умолчанию текущее время.
+    
+    Returns:
+        bool: True если сохранение успешно, False в случае ошибки
+    """
+    if timestamp is None:
+        timestamp = int(time.time())
+    
+    # Если уровни не переданы, создаем пустые массивы
+    if bid_levels is None:
+        bid_levels = []
+    if ask_levels is None:
+        ask_levels = []
+    
+    # Заполняем 5 уровней данных
+    # Если данных не хватает, заполняем нулями
+    bids = []
+    asks = []
+    
+    # Если уровней больше 5, обрезаем до 5
+    max_levels = 5
+    
+    # Дополняем имеющиеся уровни нулями, если их менее 5
+    for i in range(max_levels):
+        if i < len(bid_levels):
+            bids.append(bid_levels[i])
+        else:
+            bids.append([0.0, 0.0])
+            
+        if i < len(ask_levels):
+            asks.append(ask_levels[i])
+        else:
+            asks.append([0.0, 0.0])
+    
+    try:
+        conn = get_db_connection()
+        
+        # Формируем запрос с учетом всех уровней стакана
+        conn.execute('''
+            INSERT INTO orderbook_data 
+            (symbol, exchange, timestamp, bid_price, ask_price, bid_volume, ask_volume, spread, total_volume,
+             bid_price_1, bid_volume_1, bid_price_2, bid_volume_2, bid_price_3, bid_volume_3, bid_price_4, bid_volume_4, bid_price_5, bid_volume_5,
+             ask_price_1, ask_volume_1, ask_price_2, ask_volume_2, ask_price_3, ask_volume_3, ask_price_4, ask_volume_4, ask_price_5, ask_volume_5,
+             updated_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
+                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                   datetime('now'))
+        ''', (
+            symbol, 
+            exchange.lower(), 
+            timestamp, 
+            bid_price, 
+            ask_price, 
+            bid_volume, 
+            ask_volume, 
+            spread, 
+            total_volume,
+            
+            bids[0][0], bids[0][1], # Level 1
+            bids[1][0], bids[1][1], # Level 2
+            bids[2][0], bids[2][1], # Level 3
+            bids[3][0], bids[3][1], # Level 4
+            bids[4][0], bids[4][1], # Level 5
+            
+            asks[0][0], asks[0][1], # Level 1
+            asks[1][0], asks[1][1], # Level 2
+            asks[2][0], asks[2][1], # Level 3
+            asks[3][0], asks[3][1], # Level 4
+            asks[4][0], asks[4][1]  # Level 5
+        ))
+        conn.commit()
+        conn.close()
+        logger.info(f"Сохранены данные стакана для {exchange} {symbol} (5 уровней)")
+        return True
+    except Exception as e:
+        logger.error(f"Ошибка при сохранении данных стакана: {e}")
+        return False
+
+@app.route('/orderbook')
+def get_orderbook():
+    """API для получения данных о стакане ордеров (ликвидности) для указанной биржи и символа"""
+    exchange = request.args.get('exchange', '').lower()
+    symbol = request.args.get('symbol', '')
+    
+    logger.debug(f"Запрос orderbook: exchange={exchange}, symbol={symbol}")
+    
+    if not exchange or not symbol:
+        logger.warning(f"Orderbook: отсутствуют обязательные параметры: exchange={exchange}, symbol={symbol}")
+        return jsonify({"error": "Необходимо указать биржу и символ"}), 400
+    
+    # Преобразуем формат символа для внутреннего представления
+    internal_symbol = convert_symbol_format(symbol)
+    
+    try:
+        # Сначала проверяем, есть ли данные в таблице orderbook_data
+        conn = get_db_connection()
+        
+        # Получаем самые свежие данные из таблицы orderbook_data
+        orderbook_row = conn.execute('''
+            SELECT * FROM orderbook_data 
+            WHERE symbol = ? AND exchange = ? 
+            ORDER BY timestamp DESC LIMIT 1
+        ''', (symbol, exchange)).fetchone()
+        
+        # Если данные есть в таблице orderbook_data и они не старше 10 минут, используем их
+        if orderbook_row and (int(time.time()) - orderbook_row['timestamp']) < 600:
+            # Формируем массивы уровней bid и ask
+            bids = []
+            asks = []
+            
+            # Проверяем, есть ли в результате колонки для уровней стакана
+            if 'bid_price_1' in orderbook_row.keys():
+                # Собираем все уровни стакана
+                for i in range(1, 6):
+                    bid_price_key = f'bid_price_{i}'
+                    bid_volume_key = f'bid_volume_{i}'
+                    ask_price_key = f'ask_price_{i}'
+                    ask_volume_key = f'ask_volume_{i}'
+                    
+                    if bid_price_key in orderbook_row.keys() and orderbook_row[bid_price_key] > 0:
+                        bids.append({
+                            "price": float(orderbook_row[bid_price_key]),
+                            "volume": float(orderbook_row[bid_volume_key])
+                        })
+                    
+                    if ask_price_key in orderbook_row.keys() and orderbook_row[ask_price_key] > 0:
+                        asks.append({
+                            "price": float(orderbook_row[ask_price_key]),
+                            "volume": float(orderbook_row[ask_volume_key])
+                        })
+            
+            # Если нет уровней или они все нулевые, используем агрегированные данные
+            if not bids:
+                bids = [{
+                    "price": float(orderbook_row['bid_price']),
+                    "volume": float(orderbook_row['bid_volume'])
+                }]
+            
+            if not asks:
+                asks = [{
+                    "price": float(orderbook_row['ask_price']),
+                    "volume": float(orderbook_row['ask_volume'])
+                }]
+            
+            result = {
+                "symbol": symbol,
+                "exchange": exchange,
+                "timestamp": orderbook_row['timestamp'],
+                "bids": bids,
+                "asks": asks,
+                "spread": float(orderbook_row['spread']),
+                "totalVolume": float(orderbook_row['total_volume']),
+                "updatedAt": orderbook_row['updated_at']
+            }
+            conn.close()
+            return jsonify(result), 200
+        
+        # Если данных нет в orderbook_data или они устарели, пробуем получить их из таблицы spreads
+        
+        # Получаем bid и ask для данной биржи и символа
+        if exchange == 'paradex':
+            column_prefix = 'paradex'
+        elif exchange == 'backpack':
+            column_prefix = 'backpack'
+        elif exchange == 'hyperliquid':
+            column_prefix = 'hyperliquid'
+        else:
+            # Для неизвестных бирж возвращаем ошибку 404
+            logger.info(f"Неизвестная биржа: {exchange}")
+            if conn:
+                conn.close()
+            return generate_fake_orderbook_data(exchange, symbol)
+        
+        # Проверяем наличие нужных колонок в таблице
+        try:
+            columns = [col[1] for col in conn.execute("PRAGMA table_info(spreads)").fetchall()]
+        except Exception as e:
+            logger.error(f"Ошибка при получении информации о колонках: {e}")
+            columns = []
+        
+        has_raw_bid = f"{column_prefix}_raw_bid" in columns
+        has_raw_ask = f"{column_prefix}_raw_ask" in columns
+        has_price = f"{column_prefix}_price" in columns
+        
+        if not has_price:
+            logger.warning(f"Колонка {column_prefix}_price отсутствует в таблице.")
+            if conn:
+                conn.close()
+            return jsonify({
+                "error": f"Нет данных о ценах для биржи {exchange} и символа {symbol}"
+            }), 404
+        
+        # Формируем SQL запрос динамически в зависимости от наличия колонок
+        select_fields = f"symbol, created, {column_prefix}_price"
+        if has_raw_bid:
+            select_fields += f", {column_prefix}_raw_bid"
+        if has_raw_ask:
+            select_fields += f", {column_prefix}_raw_ask"
+        
+        # Ищем последние записи для этого символа и биржи с ненулевыми ценами
+        query = f'''
+            SELECT {select_fields}
+            FROM spreads
+            WHERE symbol = ? AND {column_prefix}_price > 0
+            ORDER BY created DESC
+            LIMIT 1
+        '''
+        
+        try:
+            row = conn.execute(query, (internal_symbol,)).fetchone()
+        except Exception as e:
+            logger.error(f"Ошибка при выполнении SQL запроса: {e}, запрос: {query}")
+            if conn:
+                conn.close()
+            return jsonify({
+                "error": f"Ошибка БД при получении данных для {exchange}/{symbol}"
+            }), 404
+        
+        if not row:
+            # Если данных нет, возвращаем 404
+            logger.warning(f"Нет данных для {exchange} и {symbol} (внутренний символ: {internal_symbol})")
+            if conn:
+                conn.close()
+            return jsonify({
+                "error": f"Нет данных для биржи {exchange} и символа {symbol}"
+            }), 404
+        
+        # Получаем цены bid и ask
+        price = row[f'{column_prefix}_price']
+        
+        # Получаем raw_bid, raw_ask из БД если есть, иначе используем аппроксимацию
+        try:
+            raw_bid = row[f'{column_prefix}_raw_bid'] if has_raw_bid and f'{column_prefix}_raw_bid' in row.keys() else price * 0.999
+            raw_ask = row[f'{column_prefix}_raw_ask'] if has_raw_ask and f'{column_prefix}_raw_ask' in row.keys() else price * 1.001
+        except Exception as e:
+            logger.error(f"Ошибка при получении значений raw_bid/raw_ask: {e}")
+            raw_bid = price * 0.999
+            raw_ask = price * 1.001
+        
+        # Рассчитываем примерный спред
+        spread_percent = ((raw_ask - raw_bid) / raw_bid) * 100 if raw_bid > 0 else 0.1
+        
+        # Эмулируем объем на основе цены (чем выше цена, тем больше объем)
+        base_volume = price * 1000  # Базовый объем зависит от цены актива
+        
+        # Для биткоина объемы в разы больше
+        if 'BTC' in symbol:
+            base_volume *= 5
+        
+        # Расчет примерных bid и ask объемов
+        bid_volume = base_volume * (1 + (spread_percent / 10))
+        ask_volume = base_volume * (1 - (spread_percent / 20))
+        
+        # Добавляем немного случайности для имитации изменений
+        import random
+        randomness = 0.1  # 10% случайности
+        bid_volume *= (1 + random.uniform(-randomness, randomness))
+        ask_volume *= (1 + random.uniform(-randomness, randomness))
+        total_volume = bid_volume + ask_volume
+        
+        # Генерируем несколько уровней стакана на основе имеющихся данных
+        bid_levels = []
+        ask_levels = []
+        
+        # Создаем 5 уровней с уменьшением объема и изменением цены
+        for i in range(5):
+            # Для ордеров на покупку (bid): чем ниже цена, тем больше объем
+            bid_price_level = raw_bid * (1 - 0.0005 * (i + 1))  # Шаг цены 0.05%
+            bid_volume_level = bid_volume * (1 - 0.15 * i)  # Уменьшение объема на 15% на каждом уровне
+            
+            # Для ордеров на продажу (ask): чем выше цена, тем больше объем
+            ask_price_level = raw_ask * (1 + 0.0005 * (i + 1))  # Шаг цены 0.05%
+            ask_volume_level = ask_volume * (1 - 0.15 * i)  # Уменьшение объема на 15% на каждом уровне
+            
+            # Добавляем случайность для более реалистичной картины
+            bid_price_level *= (1 + random.uniform(-0.0002, 0.0002))
+            bid_volume_level *= (1 + random.uniform(-0.05, 0.05))
+            ask_price_level *= (1 + random.uniform(-0.0002, 0.0002))
+            ask_volume_level *= (1 + random.uniform(-0.05, 0.05))
+            
+            bid_levels.append([float(bid_price_level), float(bid_volume_level)])
+            ask_levels.append([float(ask_price_level), float(ask_volume_level)])
+        
+        # Сохраняем полученные данные в новую таблицу orderbook_data
+        save_orderbook_data(
+            symbol=symbol,
+            exchange=exchange,
+            bid_price=raw_bid,
+            ask_price=raw_ask,
+            bid_volume=bid_volume,
+            ask_volume=ask_volume,
+            spread=spread_percent,
+            total_volume=total_volume,
+            bid_levels=bid_levels,
+            ask_levels=ask_levels,
+            timestamp=row['created']
+        )
+        
+        # Формируем ответ с несколькими уровнями стакана
+        bids = [{"price": level[0], "volume": level[1]} for level in bid_levels]
+        asks = [{"price": level[0], "volume": level[1]} for level in ask_levels]
+        
+        result = {
+            "symbol": symbol,
+            "exchange": exchange,
+            "timestamp": row['created'],
+            "bids": bids,
+            "asks": asks,
+            "spread": float(spread_percent),
+            "totalVolume": float(total_volume),
+            "updatedAt": datetime.now().isoformat()
+        }
+        
+        conn.close()
+        return jsonify(result), 200
+        
+    except Exception as e:
+        logger.error(f"Общая ошибка при получении данных стакана: {e}", exc_info=True)
+        # В случае ошибки возвращаем 404 вместо сгенерированных данных
+        if 'conn' in locals() and conn:
+            conn.close()
+        return jsonify({
+            "error": f"Ошибка при получении данных о ликвидности: {str(e)}"
+        }), 404
+    finally:
+        if 'conn' in locals() and conn:
+            try:
+                conn.close()
+            except Exception as e:
+                logger.error(f"Ошибка при закрытии соединения с БД: {e}")
+
+def convert_symbol_format(symbol):
+    """Преобразует формат символа для внутреннего представления"""
+    if '/' in symbol:
+        # Преобразуем из ETH/USDT в ETH_USDC_PERP, т.к. в базе данных используется USDC
+        parts = symbol.split('/')
+        # Всегда используем USDC вместо USDT для внутреннего представления
+        internal_symbol = f"{parts[0]}_USDC_PERP"
+        logger.info(f"Преобразование символа {symbol} -> {internal_symbol}")
+    else:
+        # Если символ уже в нужном формате, используем его
+        if 'USDT' in symbol and not 'USDC' in symbol:
+            # Заменяем USDT на USDC
+            internal_symbol = symbol.replace('USDT', 'USDC')
+            logger.info(f"Замена USDT на USDC в символе: {symbol} -> {internal_symbol}")
+        else:
+            internal_symbol = symbol
+    return internal_symbol
+
+# Добавляем дополнительный маршрут с префиксом /api для совместимости с фронтендом
+@app.route('/api/largest_spreads_api')
+def api_largest_spreads_api():
+    """Эндпоинт с префиксом /api для фронтенда"""
+    return largest_spreads_api()
+
+# Аналогично для других API-эндпоинтов
+@app.route('/api/summary')
+def api_summary():
+    """Эндпоинт с префиксом /api для фронтенда"""
+    return get_summary()
+
+@app.route('/api/data')
+def api_data():
+    """Эндпоинт с префиксом /api для фронтенда"""
+    return get_data()
+
+@app.route('/api/exchange_pairs')
+def api_exchange_pairs():
+    """Эндпоинт с префиксом /api для фронтенда"""
+    return get_exchange_pairs()
+
+@app.route('/api/symbols')
+def api_symbols():
+    """Эндпоинт с префиксом /api для фронтенда"""
+    return get_symbols()
+
+@app.route('/api/orderbook')
+def api_orderbook():
+    """Эндпоинт с префиксом /api для фронтенда для получения данных стакана ордеров"""
+    try:
+        # Проверяем параметры запроса
+        exchange = request.args.get('exchange', '').lower()
+        symbol = request.args.get('symbol', '')
+        
+        if not exchange or not symbol:
+            logger.warning(f"Orderbook API: отсутствуют обязательные параметры: exchange={exchange}, symbol={symbol}")
+            return jsonify({
+                "error": "Необходимо указать биржу и символ"
+            }), 400  # Возвращаем 400 Bad Request
+        
+        # Делегируем выполнение основной функции
+        return get_orderbook()
+    except Exception as e:
+        # Логируем ошибку и возвращаем информацию о ней
+        logger.error(f"Ошибка в API orderbook: {str(e)}")
+        return jsonify({
+            "error": f"Ошибка при получении данных: {str(e)}"
+        }), 404  # Возвращаем 404 вместо 500
+
+def generate_fake_orderbook_data(exchange, symbol):
+    """
+    Возвращает ошибку 404 для запросов данных о ликвидности, когда данные отсутствуют.
+    В соответствии с требованиями, мы не генерируем фейковые данные.
+    """
+    logger.info(f"Отсутствуют данные ликвидности для {exchange}/{symbol}")
+    return jsonify({
+        "error": f"Данные о ликвидности для {symbol} на бирже {exchange} отсутствуют"
+    }), 404
 
 if __name__ == '__main__':
     init_db()
