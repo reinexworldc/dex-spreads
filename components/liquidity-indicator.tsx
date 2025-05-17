@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Progress } from "@/components/ui/progress"
@@ -28,6 +28,7 @@ interface LiquidityData {
   spread: number
   isGenerated?: boolean
   timestamp?: number
+  symbolKey?: string // Добавляем ключ для отслеживания символа
 }
 
 export function LiquidityIndicator({ exchange, symbol, refreshInterval = 15000 }: LiquidityProps) {
@@ -37,20 +38,31 @@ export function LiquidityIndicator({ exchange, symbol, refreshInterval = 15000 }
   const [lastUpdate, setLastUpdate] = useState<number>(Date.now())
   const [updateTimer, setUpdateTimer] = useState<number | null>(null)
   const [retryCount, setRetryCount] = useState(0)
+  // Используем ref для отслеживания текущего символа и биржи
+  const currentSymbolRef = useRef(`${exchange}-${symbol}`)
 
   useEffect(() => {
+    const symbolKey = `${exchange}-${symbol}`
+    currentSymbolRef.current = symbolKey
+
     // Сбрасываем состояние при изменении символа или биржи
     setLoading(true)
-    setLiquidity(null)
+    setLiquidity(null) // Полностью сбрасываем данные ликвидности
     setError(null)
     setRetryCount(0)
     
     const fetchLiquidity = async () => {
+      // Проверяем, что компонент все еще отвечает за тот же символ
+      if (currentSymbolRef.current !== `${exchange}-${symbol}`) return
+      
       try {
-        setLoading(prevLoading => prevLoading ? true : false)
+        setLoading(true)
         
         // Используем реальный API-вызов
         const orderbookData = await fetchOrderbookData(exchange.toLowerCase(), symbol)
+        
+        // Проверяем, что компонент все еще отвечает за тот же символ после получения данных
+        if (currentSymbolRef.current !== `${exchange}-${symbol}`) return
         
         // Проверяем, являются ли данные сгенерированными
         const isGenerated = orderbookData.isFake === true
@@ -72,7 +84,8 @@ export function LiquidityIndicator({ exchange, symbol, refreshInterval = 15000 }
           totalVolume: calculatedTotalVolume,  // Всегда используем вычисленный объем
           spread: orderbookData.spread,
           isGenerated,
-          timestamp: orderbookData.timestamp
+          timestamp: orderbookData.timestamp,
+          symbolKey // Сохраняем ключ символа, для которого мы получили данные
         })
         
         setLastUpdate(Date.now())
@@ -84,6 +97,9 @@ export function LiquidityIndicator({ exchange, symbol, refreshInterval = 15000 }
         // Сбрасываем ошибку, если она была
         if (error) setError(null)
       } catch (err: any) {
+        // Проверяем, что компонент все еще отвечает за тот же символ после ошибки
+        if (currentSymbolRef.current !== `${exchange}-${symbol}`) return
+        
         console.error(`Ошибка при загрузке ликвидности для ${exchange} ${symbol}:`, err)
         
         // Увеличиваем счетчик попыток
@@ -110,13 +126,16 @@ export function LiquidityIndicator({ exchange, symbol, refreshInterval = 15000 }
         }
         
         // Генерируем локально фейковые данные в случае ошибки, чтобы пользователь видел хоть что-то
-        generateLocalFakeData()
+        generateLocalFakeData(symbolKey)
         setLoading(false)
       }
     }
     
     // Функция для генерации фейковых данных на стороне клиента в случае ошибки
-    const generateLocalFakeData = () => {
+    const generateLocalFakeData = (forSymbolKey: string) => {
+      // Если символ сменился, не генерируем данные
+      if (currentSymbolRef.current !== forSymbolKey) return
+      
       // Базовые цены в зависимости от символа
       let basePrice = 100
       
@@ -174,21 +193,31 @@ export function LiquidityIndicator({ exchange, symbol, refreshInterval = 15000 }
         totalAskVolume,
         totalVolume: totalBidVolume + totalAskVolume,
         spread,
-        isGenerated: true
+        isGenerated: true,
+        symbolKey: forSymbolKey // Сохраняем ключ символа, для которого сгенерированы данные
       })
     }
+    
+    // Сначала очищаем существующий интервал
+    if (updateTimer) clearInterval(updateTimer)
     
     // Загружаем данные при монтировании
     fetchLiquidity()
     
     // Настраиваем интервал обновления
-    const interval = setInterval(fetchLiquidity, refreshInterval)
+    const interval = setInterval(() => {
+      // Проверяем, что символ не изменился
+      if (currentSymbolRef.current === `${exchange}-${symbol}`) {
+        fetchLiquidity()
+      }
+    }, refreshInterval)
+    
     setUpdateTimer(interval as unknown as number)
     
     return () => {
       if (updateTimer) clearInterval(updateTimer)
     }
-  }, [exchange, symbol, refreshInterval, retryCount])
+  }, [exchange, symbol, refreshInterval])
 
   // Функция для определения цвета спреда
   const getSpreadColorClass = (spreadValue: number): string => {
@@ -210,14 +239,17 @@ export function LiquidityIndicator({ exchange, symbol, refreshInterval = 15000 }
     return volume.toFixed(2)
   }
 
+  // Проверяем, что данные ликвидности соответствуют текущему символу
+  const isValidLiquidityData = liquidity?.symbolKey === `${exchange}-${symbol}`
+
   return (
-    <Card className={liquidity?.isGenerated ? "border-yellow-500 dark:border-yellow-800" : ""}>
+    <Card className={liquidity?.isGenerated && isValidLiquidityData ? "border-yellow-500 dark:border-yellow-800" : ""}>
       <CardHeader className="p-4">
         <div className="flex justify-between items-center">
           <CardTitle className="text-base font-medium">
             Ликвидность {exchange}
           </CardTitle>
-          {liquidity?.isGenerated && (
+          {liquidity?.isGenerated && isValidLiquidityData && (
             <Badge variant="outline" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300">
               <AlertTriangle className="h-3 w-3 mr-1" />
               Оценка
@@ -233,7 +265,7 @@ export function LiquidityIndicator({ exchange, symbol, refreshInterval = 15000 }
           </div>
         )}
 
-        {loading && !liquidity ? (
+        {loading || !isValidLiquidityData ? (
           <div className="space-y-2">
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-4 w-full" />
