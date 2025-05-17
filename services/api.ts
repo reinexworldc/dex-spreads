@@ -216,7 +216,7 @@ export async function fetchLargestSpreads(timeRange: string): Promise<LargestSpr
  */
 export async function fetchOrderbookData(exchange: string, symbol: string, retryCount = 2): Promise<OrderbookData> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/orderbook?exchange=${exchange}&symbol=${symbol}`);
+    const response = await fetch(`${API_BASE_URL}/orderbook?exchange=${exchange}&symbol=${symbol}`);
     
     // Получаем данные из ответа, даже если статус не OK, чтобы извлечь сообщение об ошибке
     const data = await response.json();
